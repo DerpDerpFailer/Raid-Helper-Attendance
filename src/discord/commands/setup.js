@@ -67,7 +67,7 @@ const data = new SlashCommandBuilder()
     .setMaxValue(60))
   .addIntegerOption((opt) => opt
     .setName('loot-recovery-gap-days')
-    .setDescription('/loot: consecutive missed days tolerated while recovering before progress resets (default 2; 0 = must be consecutive)')
+    .setDescription('Consecutive missed days tolerated during recovery before progress resets (default 2, 0=strict)')
     .setMinValue(0)
     .setMaxValue(60))
   .addIntegerOption((opt) => opt
