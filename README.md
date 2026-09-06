@@ -1,6 +1,6 @@
 # Raid-Helper Attendance Bot
 
-[![CI](https://github.com/DerpDerpFailer/raid-helper-attendance/actions/workflows/ci.yml/badge.svg)](https://github.com/DerpDerpFailer/raid-helper-attendance/actions/workflows/ci.yml)
+[![CI](https://github.com/DerpDerpFailer/Raid-Helper-Attendance/actions/workflows/ci.yml/badge.svg)](https://github.com/DerpDerpFailer/Raid-Helper-Attendance/actions/workflows/ci.yml)
 
 Discord bot that syncs sign-ups from the Raid-Helper premium API and computes attendance
 rankings, individual trends, dropout alerts, and a per-member loot eligibility state for a single
