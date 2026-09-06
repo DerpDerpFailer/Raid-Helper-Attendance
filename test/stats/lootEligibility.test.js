@@ -9,7 +9,7 @@ process.env.DB_PATH = ':memory:';
 
 const { migrate } = require('../../src/db/migrate');
 const { getDb } = require('../../src/db/connection');
-const { processLootEligibility, step } = require('../../src/stats/lootEligibility');
+const { processLootEligibility, step, traceMemberHistory } = require('../../src/stats/lootEligibility');
 const lootRepo = require('../../src/db/repositories/lootRepo');
 
 const THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7 };
@@ -155,5 +155,70 @@ describe('stats/lootEligibility processLootEligibility (integration)', () => {
     expect(afterToggle).toEqual(beforeToggle);
     const member = membersRepo.getById('alice');
     expect(member.joined_at).toBe('2026-01-01T00:00:00.000Z'); // unchanged from seedMember
+  });
+});
+
+function seedDaySequence(memberId, prefix, days, signedDays) {
+  days.forEach((day, i) => {
+    const eventId = `${prefix}_evt${i}`;
+    seedEvent(eventId, `${day}T18:00:00.000Z`);
+    if (signedDays.has(day)) seedSignup(eventId, memberId);
+  });
+}
+
+describe('stats/lootEligibility traceMemberHistory (powers /eligibility-loot-detail)', () => {
+  it('reports no reset/change for a member who has never yet reached eligibility', () => {
+    // Bob never signs at all: he started ineligible (new member) and stays ineligible — there is
+    // no "drop" to report, since he never had eligibility to drop from, and never hit the 3-day
+    // reset threshold beyond his very first (only) miss streak reaching it once.
+    const bob = traceMemberHistory('bob', new Date('2026-08-06T00:00:00.000Z'));
+    expect(bob.finalState).toMatchObject({ eligible: false, consecutiveMissedDays: 4, accumulatedSignedDays: 0 });
+    expect(bob.trace.map((e) => e.day)).toEqual(['2026-08-01', '2026-08-03', '2026-08-04', '2026-08-05']);
+
+    // Alice signed all 4 event-days but 4 < the default recoveryDays (7): still working toward
+    // her very first eligibility, so no reset/transition has happened for her either.
+    const alice = traceMemberHistory('alice', new Date('2026-08-06T00:00:00.000Z'));
+    expect(alice.lastEligibleChangeDay).toBeNull();
+    expect(alice.lastResetDay).toBeNull();
+    expect(alice.finalState).toMatchObject({ eligible: false, accumulatedSignedDays: 4 });
+  });
+
+  it('reports a clean single drop when there has been no reset since', () => {
+    seedMember('dave2', 'Dave2', '2026-01-01T00:00:00.000Z');
+    const days = [
+      '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07', // 7 signed -> eligible on 09-07
+      '2026-09-08', '2026-09-09', '2026-09-10', // 3 missed -> drops on 09-10
+      '2026-09-11', '2026-09-12', // 2 signed since, no further gap
+    ];
+    const signed = new Set(days.slice(0, 7).concat(days.slice(10)));
+    seedDaySequence('dave2', 'dave2', days, signed);
+
+    const result = traceMemberHistory('dave2', new Date('2026-09-13T00:00:00.000Z'));
+
+    expect(result.lastEligibleChangeDay).toBe('2026-09-10');
+    expect(result.lastResetDay).toBe('2026-09-10'); // same day: no reset has happened since the drop
+    expect(result.finalState).toMatchObject({ eligible: false, accumulatedSignedDays: 2 });
+  });
+
+  it('reports the SirOlaf case: a later reset is more recent than the original drop', () => {
+    seedMember('sirolaf', 'SirOlaf', '2026-01-01T00:00:00.000Z');
+    const days = [
+      '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07', // 7 signed -> eligible on 09-07
+      '2026-09-08', '2026-09-09', '2026-09-10', // 3 missed -> drops on 09-10 (original drop)
+      '2026-09-11', '2026-09-12', // 2 signed toward recovery (accum=2)
+      '2026-09-13', '2026-09-14', '2026-09-15', // 3 more missed -> a SECOND reset on 09-15, wiping that progress
+      '2026-09-16', '2026-09-17', // 2 signed again since the second reset
+    ];
+    const signed = new Set([...days.slice(0, 7), ...days.slice(10, 12), ...days.slice(15)]);
+    seedDaySequence('sirolaf', 'sirolaf', days, signed);
+
+    const result = traceMemberHistory('sirolaf', new Date('2026-09-18T00:00:00.000Z'));
+
+    expect(result.lastEligibleChangeDay).toBe('2026-09-10'); // the original drop
+    expect(result.lastResetDay).toBe('2026-09-15'); // the more recent reset — this is what should anchor the display
+    expect(result.finalState).toMatchObject({ eligible: false, accumulatedSignedDays: 2 });
+    // The display window anchors on the more recent reset, not the older original drop.
+    expect(result.trace.filter((e) => e.day >= result.lastResetDay).map((e) => e.day))
+      .toEqual(['2026-09-15', '2026-09-16', '2026-09-17']);
   });
 });

@@ -112,4 +112,55 @@ function processLootEligibility(now = new Date()) {
   logger.info({ processedThrough: eventDays[eventDays.length - 1], memberCount: members.length }, 'Loot eligibility processed');
 }
 
-module.exports = { processLootEligibility, step };
+/**
+ * Replays a single member's full day-by-day history from their tracked join day through
+ * yesterday (read-only — does not touch stored state), for explaining *why* they're in their
+ * current eligibility state. Returns every day's outcome plus the day of the most recent state
+ * change (eligible flipping either way), so callers can show "what happened recently" rather than
+ * a potentially months-long list.
+ */
+function traceMemberHistory(memberId, now = new Date()) {
+  const db = getDb();
+  const todayStart = startOfUTCDate(now);
+  const thresholds = settingsRepo.getLootThresholds();
+
+  const member = db.prepare('SELECT joined_at FROM members WHERE id = ?').get(memberId);
+  if (!member) return null;
+
+  const joinedDay = member.joined_at.slice(0, 10);
+  const eventDays = db.prepare(
+    'SELECT DISTINCT date(start_time) AS day FROM events WHERE start_time < ? AND date(start_time) >= ? ORDER BY day'
+  ).all(todayStart.toISOString(), joinedDay).map((r) => r.day);
+
+  const signedDays = new Set(db.prepare(`
+    SELECT DISTINCT date(e.start_time) AS day
+    FROM signups s JOIN events e ON e.id = s.event_id
+    WHERE s.member_id = ? AND e.start_time < ?
+  `).all(memberId, todayStart.toISOString()).map((r) => r.day));
+
+  let state = { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 0 };
+  const trace = [];
+  let lastEligibleChangeDay = null; // last day the eligible flag itself flipped, either direction
+  let lastResetDay = null; // last day a fresh ineligibleAfterDays-long gap wiped recovery progress
+  // (this can be more recent than lastEligibleChangeDay: someone can drop once, then have their
+  // in-progress recovery wiped again by a second gap without ever having regained eligibility in
+  // between — that second wipe is what actually explains their current low progress).
+
+  for (const day of eventDays) {
+    const signed = signedDays.has(day);
+    const before = state.eligible;
+    state = step(state, signed, thresholds);
+    if (state.eligible !== before) lastEligibleChangeDay = day;
+    // Exact match, not >=: consecutiveMissedDays only ever crosses the threshold once per streak
+    // (it climbs by 1/day), so this catches the day the reset actually happens, not every
+    // subsequent day the same ongoing streak continues past it.
+    if (!signed && state.consecutiveMissedDays === thresholds.ineligibleAfterDays) lastResetDay = day;
+    trace.push({ day, signed, ...state });
+  }
+
+  return {
+    joinedDay, thresholds, trace, lastEligibleChangeDay, lastResetDay, finalState: state,
+  };
+}
+
+module.exports = { processLootEligibility, traceMemberHistory, step };

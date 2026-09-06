@@ -4,9 +4,10 @@ const stats = require('./stats');
 const dropouts = require('./dropouts');
 const nosignup = require('./nosignup');
 const loot = require('./loot');
+const lootDetail = require('./lootDetail');
 const sync = require('./sync');
 const setup = require('./setup');
 
-const commands = [top, flop, stats, dropouts, nosignup, loot, sync, setup];
+const commands = [top, flop, stats, dropouts, nosignup, loot, lootDetail, sync, setup];
 
 module.exports = { commands };
