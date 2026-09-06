@@ -2,6 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { getDb } = require('../../db/connection');
 const syncStateRepo = require('../../db/repositories/syncStateRepo');
 const { pollEvents } = require('../../scheduler/pollEvents');
+const { reconcileMembers } = require('../../scheduler/reconcileMembers');
 const { snapshotStats } = require('../../scheduler/snapshotStats');
 const { processLootEligibility } = require('../../stats/lootEligibility');
 const logger = require('../../utils/logger');
@@ -46,6 +47,7 @@ async function execute(interaction) {
   // action === 'now'
   await interaction.deferReply({ ephemeral: true });
   try {
+    await reconcileMembers(interaction.guild);
     await pollEvents();
     const { current } = snapshotStats();
     processLootEligibility();
