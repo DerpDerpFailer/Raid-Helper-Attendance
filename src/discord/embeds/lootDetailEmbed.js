@@ -40,12 +40,18 @@ function buildLootDetailEmbed({
     sections.push(`**Last change:** regained eligibility on \`${lastEligibleChangeDay}\` (reached ${thresholds.recoveryDays} signed days).`);
   } else if (lastResetDay) {
     anchorDay = lastResetDay;
+    // lastResetDay === lastEligibleChangeDay means this reset IS the day eligibility was first
+    // lost (while previously eligible) — that one uses ineligibleAfterDays. Every other reset
+    // happened while already ineligible/recovering, so it's governed by recoveryGapDays instead
+    // (see step()/traceMemberHistory in stats/lootEligibility.js) — a different, independently
+    // configurable threshold that must not be confused with ineligibleAfterDays in the narrative.
+    const recoveryResetThreshold = thresholds.recoveryGapDays + 1;
     if (lastEligibleChangeDay === null) {
-      sections.push(`Never yet reached eligibility since joining — most recent reset on \`${lastResetDay}\` (${thresholds.ineligibleAfterDays} consecutive missed days).`);
+      sections.push(`Never yet reached eligibility since joining — most recent reset on \`${lastResetDay}\` (${recoveryResetThreshold} consecutive missed day(s)).`);
     } else if (lastResetDay === lastEligibleChangeDay) {
       sections.push(`**Last change:** dropped to ineligible on \`${lastResetDay}\` (${thresholds.ineligibleAfterDays} consecutive missed days).`);
     } else {
-      sections.push(`Originally dropped to ineligible on \`${lastEligibleChangeDay}\`; recovery progress was most recently reset on \`${lastResetDay}\` after another ${thresholds.ineligibleAfterDays}-day gap.`);
+      sections.push(`Originally dropped to ineligible on \`${lastEligibleChangeDay}\`; recovery progress was most recently reset on \`${lastResetDay}\` after another ${recoveryResetThreshold}-day gap.`);
     }
   } else {
     // Ineligible, but never yet hit a reset in the visible history — a very new member still
