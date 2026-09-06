@@ -159,8 +159,12 @@ async function execute(interaction) {
   const t = settingsRepo.getDropoutThresholds();
   const lt = settingsRepo.getLootThresholds();
   const commandsRoleId = settingsRepo.getCommandsRoleId();
+  const monitoredRoleId = settingsRepo.getMonitoredRoleId();
+  const { presenceWeight, responseWeight } = settingsRepo.getScoreWeights();
   const currentSummary = [
+    `Tracked-member role: ${monitoredRoleId ? `<@&${monitoredRoleId}>` : '**not set** — falls back to every non-bot member'}`,
     `Commands role: ${commandsRoleId ? `<@&${commandsRoleId}>` : '**not set** — only admins (Manage Server) can use commands right now'}`,
+    `Global Score weighting: **${Math.round(presenceWeight * 100)}% presence / ${Math.round(responseWeight * 100)}% sign-up**`,
     `Period cadence: **${settingsRepo.getPeriodMode()}**${settingsRepo.getPeriodMode() === 'rolling' ? ` (${settingsRepo.getPeriodRollingDays()}d)` : ''}`,
     `Ranking eligibility: **${settingsRepo.getEligibilityMinDays()}+ days**`,
     `Dropout thresholds — Alert: rank ≥${t.alertRank} or score ≥${t.alertScore}, Critical: rank ≥${t.criticalRank} or score ≥${t.criticalScore}`,
