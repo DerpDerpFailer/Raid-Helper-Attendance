@@ -54,6 +54,18 @@ function updateDisplayName(id, displayName) {
     .run(displayName, new Date().toISOString(), id);
 }
 
+/**
+ * Toggles whether a member currently holds the monitored role (/setup role) — independent from
+ * is_active/joined_at, which only ever change on a genuine Discord join/leave. This is what keeps
+ * a role misconfiguration or a bot glitch from resetting a veteran's tenure or loot progress:
+ * losing/regaining the role just hides/reveals them in stats, it never wipes history.
+ */
+function setTracked(id, tracked) {
+  const db = getDb();
+  db.prepare('UPDATE members SET is_tracked = ?, updated_at = ? WHERE id = ?')
+    .run(tracked ? 1 : 0, new Date().toISOString(), id);
+}
+
 function getActiveMemberIds() {
   const db = getDb();
   return db.prepare('SELECT id FROM members WHERE is_active = 1').all().map((r) => r.id);
@@ -74,6 +86,7 @@ module.exports = {
   recordJoin,
   recordLeave,
   updateDisplayName,
+  setTracked,
   getActiveMemberIds,
   getAll,
   getById,

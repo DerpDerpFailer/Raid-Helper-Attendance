@@ -3,21 +3,20 @@ const settingsRepo = require('../db/repositories/settingsRepo');
 const { isTracked } = require('../scheduler/reconcileMembers');
 const logger = require('../utils/logger');
 
-/** Live-updates the local member table the moment Discord reports a join/role-change/leave. */
+/**
+ * Live-updates the local member table the moment Discord reports a join/role-change/leave.
+ * Genuine Discord presence (join/leave) and the monitored role (tracked/untracked) are handled
+ * independently — see scheduler/reconcileMembers.js for why that separation matters.
+ */
 function registerMemberEvents(client) {
   client.on('guildMemberAdd', (member) => {
-    const monitoredRoleId = settingsRepo.getMonitoredRoleId();
-    // With a monitored role configured, a fresh join has no roles yet — wait for the
-    // guildMemberUpdate that assigns it instead of tracking them from raw join.
-    if (monitoredRoleId) return;
     if (member.user.bot) return;
 
-    membersRepo.recordJoin(
-      member.id,
-      member.displayName ?? member.user.username,
-      (member.joinedAt ?? new Date()).toISOString(),
-      member.user.bot
-    );
+    const displayName = member.displayName ?? member.user.username;
+    membersRepo.recordJoin(member.id, displayName, (member.joinedAt ?? new Date()).toISOString(), false);
+
+    const monitoredRoleId = settingsRepo.getMonitoredRoleId();
+    membersRepo.setTracked(member.id, isTracked(member, monitoredRoleId));
     logger.info({ memberId: member.id }, 'Member joined');
   });
 
@@ -29,21 +28,14 @@ function registerMemberEvents(client) {
     const nowTracked = isTracked(newMember, monitoredRoleId);
     if (wasTracked === nowTracked) return;
 
-    const now = new Date().toISOString();
-    const displayName = newMember.displayName ?? newMember.user.username;
-
-    if (nowTracked) {
-      membersRepo.recordJoin(newMember.id, displayName, now, newMember.user.bot);
-      logger.info({ memberId: newMember.id }, 'Member gained the tracked role');
-    } else {
-      membersRepo.recordLeave(newMember.id, now);
-      logger.info({ memberId: newMember.id }, 'Member lost the tracked role');
-    }
+    // Only flips visibility — never touches joined_at or loot-eligibility progress.
+    membersRepo.setTracked(newMember.id, nowTracked);
+    logger.info({ memberId: newMember.id }, nowTracked ? 'Member gained the tracked role' : 'Member lost the tracked role');
   });
 
   client.on('guildMemberRemove', (member) => {
     membersRepo.recordLeave(member.id, new Date().toISOString());
-    logger.info({ memberId: member.id }, 'Member left');
+    logger.info({ memberId: member.id }, 'Member left the Discord server');
   });
 }
 

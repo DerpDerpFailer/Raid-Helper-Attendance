@@ -136,4 +136,24 @@ describe('stats/lootEligibility processLootEligibility (integration)', () => {
     const after = lootRepo.getRow('alice');
     expect(after).toEqual(before);
   });
+
+  it('losing/regaining the tracked role hides then restores a member without resetting their progress (the DerpyFailer/Creeday bug)', () => {
+    const membersRepo = require('../../src/db/repositories/membersRepo');
+    const beforeToggle = lootRepo.getRow('alice');
+
+    // Simulate an admin removing then re-adding the monitored role — NOT a real Discord leave.
+    membersRepo.setTracked('alice', false);
+    expect(lootRepo.getTrackedWithState().find((r) => r.member_id === 'alice')).toBeUndefined();
+
+    // While untracked, processing must skip her entirely (no state change).
+    processLootEligibility(new Date('2026-08-10T00:00:00.000Z'));
+    expect(lootRepo.getRow('alice')).toEqual(beforeToggle);
+
+    membersRepo.setTracked('alice', true);
+    const afterToggle = lootRepo.getRow('alice');
+    // joined_at and prior progress must be untouched by the role toggle itself.
+    expect(afterToggle).toEqual(beforeToggle);
+    const member = membersRepo.getById('alice');
+    expect(member.joined_at).toBe('2026-01-01T00:00:00.000Z'); // unchanged from seedMember
+  });
 });

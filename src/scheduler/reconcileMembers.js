@@ -3,10 +3,9 @@ const settingsRepo = require('../db/repositories/settingsRepo');
 const logger = require('../utils/logger');
 
 /**
- * Whether a guild member currently counts as a "real" tracked member. If a monitored role was
- * configured via /setup role, that role is the sole signal (excludes bots, allies, and guests
- * automatically, since none of them hold it). Otherwise falls back to "not a bot account" — the
- * bot's behavior before /setup existed.
+ * Whether a guild member currently holds the monitored role (/setup role). Falls back to "not a
+ * bot account" when no role is configured — the bot's behavior before /setup existed. This is
+ * purely about *visibility* in stats/loot, never about tenure — see reconcileMembers below.
  */
 function isTracked(member, monitoredRoleId) {
   if (monitoredRoleId) return member.roles.cache.has(monitoredRoleId);
@@ -14,41 +13,51 @@ function isTracked(member, monitoredRoleId) {
 }
 
 /**
- * Daily safety net for live role-change/leave events: re-derives tracked status for the whole
- * roster in case the bot missed an update (was offline). Idempotent — safe to run as often as
- * needed. Only resets a member's joined_at (tenure clock) when they transition from
- * not-tracked to tracked; an already-tracked member's tenure is left untouched.
+ * Daily safety net for live join/leave/role-change events, in case the bot missed one (was
+ * offline). Idempotent — safe to run as often as needed.
+ *
+ * Two independent signals, deliberately never conflated:
+ *  - is_active / joined_at / left_at: real Discord presence. Only a genuine leave+rejoin resets
+ *    the tenure clock — this is what /eligibility-loot and the 14-day ranking grace period key off.
+ *  - is_tracked: does this member currently hold the monitored role right now. Toggling it just
+ *    shows/hides them in stats; it never touches tenure or wipes loot-eligibility progress. This
+ *    is what keeps a role misconfiguration or a bot restart glitch from unfairly penalizing
+ *    veteran members who never actually left the server.
  */
 async function reconcileMembers(guild) {
   const roster = await guild.members.fetch();
   const monitoredRoleId = settingsRepo.getMonitoredRoleId();
   const now = new Date().toISOString();
-  const trackedIds = new Set();
+  const presentIds = new Set();
 
   for (const member of roster.values()) {
-    if (!isTracked(member, monitoredRoleId)) continue;
+    if (member.user.bot) {
+      presentIds.add(member.id); // still "present" so we don't spuriously mark bots as departed
+      continue;
+    }
 
-    trackedIds.add(member.id);
+    presentIds.add(member.id);
     const displayName = member.displayName ?? member.user.username;
     const existing = membersRepo.getById(member.id);
 
     if (!existing || existing.is_active === 0) {
-      // Newly (re)acquired tracked status since we last checked — tenure resets from now, since
-      // Discord doesn't expose "when was this role assigned" for us to use instead.
-      membersRepo.recordJoin(member.id, displayName, now, member.user.bot);
+      // Genuine (re)join of the Discord server — tenure resets from their real Discord join date.
+      membersRepo.recordJoin(member.id, displayName, (member.joinedAt ?? new Date()).toISOString(), false);
     } else {
       membersRepo.updateDisplayName(member.id, displayName);
     }
+
+    membersRepo.setTracked(member.id, isTracked(member, monitoredRoleId));
   }
 
   for (const localMember of membersRepo.getAll()) {
-    if (localMember.is_active === 1 && !trackedIds.has(localMember.id)) {
+    if (localMember.is_active === 1 && !presentIds.has(localMember.id)) {
       membersRepo.recordLeave(localMember.id, now);
-      logger.info({ memberId: localMember.id }, 'Member marked as departed/untracked during reconciliation');
+      logger.info({ memberId: localMember.id }, 'Member marked as departed (left the Discord server)');
     }
   }
 
-  logger.info({ rosterSize: roster.size, trackedCount: trackedIds.size }, 'Member reconciliation complete');
+  logger.info({ rosterSize: roster.size, presentCount: presentIds.size }, 'Member reconciliation complete');
 }
 
 module.exports = { reconcileMembers, isTracked };

@@ -37,7 +37,7 @@ function getTrackedWithState() {
       le.eligible, le.consecutive_missed_days, le.accumulated_signed_days, le.last_processed_day
     FROM members m
     LEFT JOIN loot_eligibility le ON le.member_id = m.id
-    WHERE m.is_bot = 0 AND m.is_active = 1
+    WHERE m.is_bot = 0 AND m.is_active = 1 AND m.is_tracked = 1
   `).all();
 }
 

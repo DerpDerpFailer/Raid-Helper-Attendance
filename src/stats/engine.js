@@ -17,7 +17,7 @@ WITH base AS (
    AND e.start_time <= @now
    AND e.start_time >= m.joined_at
    AND (m.is_active = 1 OR m.left_at IS NULL OR e.start_time <= m.left_at)
-  WHERE m.is_bot = 0
+  WHERE m.is_bot = 0 AND m.is_tracked = 1
   GROUP BY m.id
 ),
 signed AS (
@@ -106,7 +106,7 @@ WITH window_events AS (
 ),
 tracked AS (
   SELECT id, display_name, joined_at FROM members
-  WHERE is_bot = 0 AND is_active = 1
+  WHERE is_bot = 0 AND is_active = 1 AND is_tracked = 1
     AND (julianday(@now) - julianday(joined_at)) >= @eligibilityMinDays
 ),
 signed_in_window AS (

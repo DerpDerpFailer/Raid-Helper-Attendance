@@ -22,7 +22,7 @@ const data = new SlashCommandBuilder()
 function getCounts() {
   const db = getDb();
   const events = db.prepare('SELECT COUNT(*) AS n FROM events').get().n;
-  const members = db.prepare('SELECT COUNT(*) AS n FROM members WHERE is_active = 1').get().n;
+  const members = db.prepare('SELECT COUNT(*) AS n FROM members WHERE is_bot = 0 AND is_active = 1 AND is_tracked = 1').get().n;
   return { events, members };
 }
 
@@ -37,7 +37,7 @@ async function execute(interaction) {
         `Backfill done: ${syncStateRepo.get('backfill_done') === 'true' ? 'yes' : 'no'}`,
         `Last poll: ${syncStateRepo.get('last_poll_at') ?? 'never'}`,
         `Events tracked: ${events}`,
-        `Active members: ${members}`,
+        `Tracked members: ${members}`,
       ].join('\n'),
     });
     return;
