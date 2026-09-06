@@ -66,6 +66,11 @@ const data = new SlashCommandBuilder()
     .setMinValue(1)
     .setMaxValue(60))
   .addIntegerOption((opt) => opt
+    .setName('loot-recovery-gap-days')
+    .setDescription('/loot: consecutive missed days tolerated while recovering before progress resets (default 2; 0 = must be consecutive)')
+    .setMinValue(0)
+    .setMaxValue(60))
+  .addIntegerOption((opt) => opt
     .setName('top-flop-size')
     .setDescription('Number of entries shown in /top and /flop (default 10)')
     .setMinValue(1)
@@ -130,6 +135,7 @@ async function execute(interaction) {
   const lootOverrides = {
     ineligibleAfterDays: interaction.options.getInteger('loot-ineligible-after-days') ?? undefined,
     recoveryDays: interaction.options.getInteger('loot-recovery-days') ?? undefined,
+    recoveryGapDays: interaction.options.getInteger('loot-recovery-gap-days') ?? undefined,
   };
   const lootChanged = Object.values(lootOverrides).some((v) => v !== undefined);
   if (lootChanged) {
@@ -158,7 +164,7 @@ async function execute(interaction) {
     `Period cadence: **${settingsRepo.getPeriodMode()}**${settingsRepo.getPeriodMode() === 'rolling' ? ` (${settingsRepo.getPeriodRollingDays()}d)` : ''}`,
     `Ranking eligibility: **${settingsRepo.getEligibilityMinDays()}+ days**`,
     `Dropout thresholds — Alert: rank ≥${t.alertRank} or score ≥${t.alertScore}, Critical: rank ≥${t.criticalRank} or score ≥${t.criticalScore}`,
-    `Loot eligibility — drops after ${lt.ineligibleAfterDays} consecutive missed days, recovers after ${lt.recoveryDays} signed days`,
+    `Loot eligibility — drops after ${lt.ineligibleAfterDays} consecutive missed days, recovers after ${lt.recoveryDays} signed days (tolerates ${lt.recoveryGapDays} missed day(s) in a row during recovery before progress resets)`,
     `/top and /flop size: **${settingsRepo.getTopFlopSize()}**`,
     `Poll interval: **every ${settingsRepo.getPollIntervalMinutes()} minutes**`,
   ];

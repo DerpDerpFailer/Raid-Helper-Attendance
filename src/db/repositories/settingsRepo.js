@@ -19,7 +19,8 @@ const DEFAULT_DROPOUT_THRESHOLDS = {
 
 const LOOT_INELIGIBLE_AFTER_DAYS_KEY = 'loot_ineligible_after_days';
 const LOOT_RECOVERY_DAYS_KEY = 'loot_recovery_days';
-const DEFAULT_LOOT_THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7 };
+const LOOT_RECOVERY_GAP_DAYS_KEY = 'loot_recovery_gap_days';
+const DEFAULT_LOOT_THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7, recoveryGapDays: 2 };
 
 const TOP_FLOP_SIZE_KEY = 'top_flop_size';
 const POLL_INTERVAL_MINUTES_KEY = 'poll_interval_minutes';
@@ -129,20 +130,25 @@ function setDropoutThresholds({
 
 /**
  * /eligibility-loot thresholds (set via /setup): ineligibleAfterDays consecutive days with zero
- * sign-up drops eligibility; recoveryDays signed days (gaps under ineligibleAfterDays don't reset
- * progress, a fresh ineligibleAfterDays-long gap does) are needed to regain it.
+ * sign-up drops eligibility (while currently eligible). recoveryDays signed days are needed to
+ * regain it. recoveryGapDays is a separate, independent threshold: how many consecutive missed
+ * days are tolerated *while already recovering* before accumulated progress wipes back to zero —
+ * 0 means recovery must be done in `recoveryDays` strictly consecutive signed days, higher values
+ * tolerate longer gaps without losing progress. See stats/lootEligibility.js's step().
  */
 function getLootThresholds() {
   return {
     ineligibleAfterDays: numberOr(get(LOOT_INELIGIBLE_AFTER_DAYS_KEY), DEFAULT_LOOT_THRESHOLDS.ineligibleAfterDays),
     recoveryDays: numberOr(get(LOOT_RECOVERY_DAYS_KEY), DEFAULT_LOOT_THRESHOLDS.recoveryDays),
+    recoveryGapDays: numberOr(get(LOOT_RECOVERY_GAP_DAYS_KEY), DEFAULT_LOOT_THRESHOLDS.recoveryGapDays),
   };
 }
 
 /** Only overrides the thresholds actually passed in; the rest keep their current value. */
-function setLootThresholds({ ineligibleAfterDays, recoveryDays }) {
+function setLootThresholds({ ineligibleAfterDays, recoveryDays, recoveryGapDays }) {
   if (ineligibleAfterDays !== undefined) set(LOOT_INELIGIBLE_AFTER_DAYS_KEY, String(ineligibleAfterDays));
   if (recoveryDays !== undefined) set(LOOT_RECOVERY_DAYS_KEY, String(recoveryDays));
+  if (recoveryGapDays !== undefined) set(LOOT_RECOVERY_GAP_DAYS_KEY, String(recoveryGapDays));
 }
 
 /** Number of entries shown in /top and /flop (set via /setup). Falls back to TOP_FLOP_SIZE. */

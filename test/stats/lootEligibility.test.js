@@ -12,10 +12,10 @@ const { getDb } = require('../../src/db/connection');
 const { processLootEligibility, step, traceMemberHistory } = require('../../src/stats/lootEligibility');
 const lootRepo = require('../../src/db/repositories/lootRepo');
 
-const THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7 };
+const THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7, recoveryGapDays: 2 };
 
-function run(days, initial = { eligible: true, consecutiveMissedDays: 0, accumulatedSignedDays: 0 }) {
-  return days.reduce((state, signed) => step(state, signed, THRESHOLDS), initial);
+function run(days, initial = { eligible: true, consecutiveMissedDays: 0, accumulatedSignedDays: 0 }, thresholds = THRESHOLDS) {
+  return days.reduce((state, signed) => step(state, signed, thresholds), initial);
 }
 
 describe('stats/lootEligibility step() — the three worked examples from the spec', () => {
@@ -63,6 +63,66 @@ describe('stats/lootEligibility step() — the three worked examples from the sp
 
     state = run([false, false, false], state);
     expect(state).toMatchObject({ eligible: false, accumulatedSignedDays: 0 });
+  });
+});
+
+describe('stats/lootEligibility step() — recoveryGapDays independent from ineligibleAfterDays', () => {
+  const droppedState = { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 0 };
+
+  it('recoveryGapDays: 0 requires recovery in strictly consecutive signed days — any single miss resets', () => {
+    const thresholds = { ...THRESHOLDS, recoveryGapDays: 0 };
+    let state = run([true, true], droppedState, thresholds); // 2 signed, accumulated=2
+    expect(state).toMatchObject({ accumulatedSignedDays: 2, eligible: false });
+
+    state = run([false], state, thresholds); // a single missed day is enough to wipe it
+    expect(state).toMatchObject({ accumulatedSignedDays: 0, eligible: false });
+
+    // 7 strictly consecutive signed days recovers.
+    state = run([true, true, true, true, true, true, true], droppedState, thresholds);
+    expect(state).toMatchObject({ eligible: true });
+  });
+
+  it('recoveryGapDays: 1 tolerates one missed day in a row, but not two', () => {
+    const thresholds = { ...THRESHOLDS, recoveryGapDays: 1 };
+    let state = run([true, false, true, true, true, true, true], droppedState, thresholds);
+    // 1 signed, 1 missed (tolerated, progress kept at 1), then 5 more signed = 6 total.
+    expect(state).toMatchObject({ accumulatedSignedDays: 6, eligible: false });
+
+    state = run([true], state, thresholds); // the 7th signed day -> recovers
+    expect(state).toMatchObject({ eligible: true });
+
+    // But two consecutive missed days do wipe progress.
+    let interrupted = run([true, true, false, false], droppedState, thresholds);
+    expect(interrupted).toMatchObject({ accumulatedSignedDays: 0, eligible: false });
+  });
+
+  it('recoveryGapDays: 2 matches the historical default behavior (2 tolerated, 3 resets)', () => {
+    const thresholds = { ...THRESHOLDS, recoveryGapDays: 2 };
+    // 1 signed, 2 missed (tolerated — cmd never reaches 3), then 6 more signed = 7 total -> recovers.
+    const tolerated = run([true, false, false, true, true, true, true, true, true], droppedState, thresholds);
+    expect(tolerated).toMatchObject({ eligible: true });
+
+    const wiped = run([true, false, false, false], droppedState, thresholds);
+    expect(wiped).toMatchObject({ accumulatedSignedDays: 0, eligible: false });
+  });
+
+  it('is fully independent from ineligibleAfterDays: changing one does not affect the other', () => {
+    // A much stricter drop threshold (1 missed day drops immediately) combined with a very
+    // permissive recovery gap (5 missed days tolerated during recovery).
+    const thresholds = { ineligibleAfterDays: 1, recoveryDays: 7, recoveryGapDays: 5 };
+
+    // Drops after just 1 missed day (ineligibleAfterDays: 1), starting from eligible.
+    const dropped = run([false], { eligible: true, consecutiveMissedDays: 0, accumulatedSignedDays: 0 }, thresholds);
+    expect(dropped.eligible).toBe(false);
+
+    // While recovering, 5 consecutive missed days are tolerated without wiping progress.
+    let state = run([true, true], droppedState, thresholds); // accumulated=2
+    state = run([false, false, false, false, false], state, thresholds); // 5 missed, tolerated
+    expect(state).toMatchObject({ accumulatedSignedDays: 2, eligible: false });
+
+    // The 6th consecutive missed day exceeds the gap and wipes it.
+    state = run([false], state, thresholds);
+    expect(state).toMatchObject({ accumulatedSignedDays: 0, eligible: false });
   });
 });
 

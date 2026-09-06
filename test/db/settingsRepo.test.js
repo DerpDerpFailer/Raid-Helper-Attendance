@@ -43,6 +43,22 @@ describe('db/repositories/settingsRepo', () => {
     expect(settingsRepo.getPollIntervalMinutes()).toBe(5);
   });
 
+  it('loot thresholds default to ineligibleAfterDays=3/recoveryDays=7/recoveryGapDays=2, independently overridable', () => {
+    expect(settingsRepo.getLootThresholds()).toEqual({
+      ineligibleAfterDays: 3, recoveryDays: 7, recoveryGapDays: 2,
+    });
+
+    settingsRepo.setLootThresholds({ recoveryGapDays: 0 });
+    expect(settingsRepo.getLootThresholds()).toEqual({
+      ineligibleAfterDays: 3, recoveryDays: 7, recoveryGapDays: 0,
+    });
+
+    settingsRepo.setLootThresholds({ ineligibleAfterDays: 5 });
+    expect(settingsRepo.getLootThresholds()).toEqual({
+      ineligibleAfterDays: 5, recoveryDays: 7, recoveryGapDays: 0, // untouched by the ineligibleAfterDays change
+    });
+  });
+
   it('commands role defaults to unset (admins-only) until /setup commands-role overrides it', () => {
     expect(settingsRepo.getCommandsRoleId()).toBeNull();
 

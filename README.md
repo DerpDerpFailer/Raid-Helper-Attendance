@@ -70,6 +70,7 @@ All optional — omit everything to just see the current values.
 | `dropout-critical-rank` / `dropout-critical-score` | 30 / 0.30 | `/dropouts` Critical threshold |
 | `loot-ineligible-after-days` | 3 | Consecutive missed days before loot eligibility drops |
 | `loot-recovery-days` | 7 | Signed days needed to (re)gain loot eligibility |
+| `loot-recovery-gap-days` | 2 | Consecutive missed days tolerated *while recovering* before progress resets to 0 — independent from `loot-ineligible-after-days`. `0` means recovery must be `loot-recovery-days` strictly consecutive signed days |
 | `top-flop-size` | 10 | Number of entries shown in `/top` and `/flop` |
 | `poll-interval-minutes` | 20 | How often the bot polls the Raid-Helper API |
 

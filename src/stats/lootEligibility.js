@@ -18,9 +18,14 @@ function dayBefore(dayStr) {
  *
  *  - Signed: consecutive-missed resets to 0. If currently ineligible, one day of recovery
  *    progress accrues; reaching `recoveryDays` restores eligibility.
- *  - Not signed: consecutive-missed grows. Hitting `ineligibleAfterDays` drops eligibility (if
- *    not already dropped) AND wipes any in-progress recovery (if already ineligible) — a fresh
- *    gap that long resets the recovery clock even though the member was already ineligible.
+ *  - Not signed, currently eligible: consecutive-missed grows; hitting `ineligibleAfterDays`
+ *    drops eligibility.
+ *  - Not signed, already ineligible (recovering): consecutive-missed grows; hitting
+ *    `recoveryGapDays + 1` wipes the in-progress recovery back to zero. This is a threshold
+ *    independent from `ineligibleAfterDays` — it only controls how forgiving *regaining*
+ *    eligibility is, not how eligibility is lost in the first place. `recoveryGapDays` is how
+ *    many consecutive missed days are tolerated without losing progress (0 = recovery must be
+ *    done in `recoveryDays` strictly consecutive signed days).
  */
 function step(state, signedToday, thresholds) {
   let { eligible, consecutiveMissedDays, accumulatedSignedDays } = state;
@@ -36,8 +41,13 @@ function step(state, signedToday, thresholds) {
     }
   } else {
     consecutiveMissedDays += 1;
-    if (consecutiveMissedDays >= thresholds.ineligibleAfterDays) {
-      eligible = false;
+
+    if (eligible) {
+      if (consecutiveMissedDays >= thresholds.ineligibleAfterDays) {
+        eligible = false;
+        accumulatedSignedDays = 0;
+      }
+    } else if (consecutiveMissedDays >= thresholds.recoveryGapDays + 1) {
       accumulatedSignedDays = 0;
     }
   }
@@ -141,20 +151,27 @@ function traceMemberHistory(memberId, now = new Date()) {
   let state = { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 0 };
   const trace = [];
   let lastEligibleChangeDay = null; // last day the eligible flag itself flipped, either direction
-  let lastResetDay = null; // last day a fresh ineligibleAfterDays-long gap wiped recovery progress
-  // (this can be more recent than lastEligibleChangeDay: someone can drop once, then have their
-  // in-progress recovery wiped again by a second gap without ever having regained eligibility in
-  // between — that second wipe is what actually explains their current low progress).
+  let lastResetDay = null; // last day a fresh gap wiped recovery progress (accumulatedSignedDays)
+  // back to zero — either the day eligibility was first lost (ineligibleAfterDays) or, if that
+  // happened before and the member never regained eligibility since, a later gap while already
+  // recovering (recoveryGapDays). This can be more recent than lastEligibleChangeDay: someone can
+  // drop once, then have their in-progress recovery wiped again by a second gap without ever
+  // having regained eligibility in between — that second wipe is what actually explains their
+  // current low progress.
 
   for (const day of eventDays) {
     const signed = signedDays.has(day);
     const before = state.eligible;
     state = step(state, signed, thresholds);
     if (state.eligible !== before) lastEligibleChangeDay = day;
-    // Exact match, not >=: consecutiveMissedDays only ever crosses the threshold once per streak
-    // (it climbs by 1/day), so this catches the day the reset actually happens, not every
-    // subsequent day the same ongoing streak continues past it.
-    if (!signed && state.consecutiveMissedDays === thresholds.ineligibleAfterDays) lastResetDay = day;
+    // Exact match, not >=: consecutiveMissedDays only ever crosses a given threshold once per
+    // streak (it climbs by 1/day), so this catches the day the reset actually happens, not every
+    // subsequent day the same ongoing streak continues past it. Which threshold applies depends
+    // on whether the member was already eligible entering this day (`before`) — see step() above.
+    if (!signed) {
+      const resetThreshold = before ? thresholds.ineligibleAfterDays : thresholds.recoveryGapDays + 1;
+      if (state.consecutiveMissedDays === resetThreshold) lastResetDay = day;
+    }
     trace.push({ day, signed, ...state });
   }
 
