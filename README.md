@@ -129,8 +129,11 @@ tables: `members` (roster + tenure + tracked flag), `events` / `signups` (synced
 ## Known limitations / things to revisit
 
 - `/servers/{id}/events` reports `pages`/`currentPage` fields implying pagination exists, but the
-  query param to request further pages was never observed/documented — `sync/backfill.js` logs a
-  warning if it ever sees more than one page, since only the first would get backfilled.
+  query param to request further pages isn't documented anywhere, and no server tested so far has
+  enough events to actually trigger a second page (page size limit is well above 166). `getServerEvents`
+  (`src/raidhelper/client.js`) follows the `page` convention best-effort and logs a loud warning if
+  the collected total ever doesn't match `eventsOverall` — that's the signal to revisit this if it
+  ever fires.
 - The exact Raid-Helper JSON field names (`className` for status, `entryTime` for sign-up
   timestamp, etc. — see `src/raidhelper/mapper.js`) were reverse-engineered from one server's real
   API responses, not from official documentation of the field semantics. They've held up in

@@ -80,9 +80,36 @@ function getEvent(eventId) {
   return request(`/events/${eventId}`);
 }
 
-/** GET /servers/{id}/events — general data of every event on the server. Requires server API key. */
-function getServerEvents(serverId) {
-  return request(`/servers/${serverId}/events`, { auth: true });
+/**
+ * GET /servers/{id}/events — general data of every event on the server. Requires server API key.
+ *
+ * The response reports `pages`/`currentPage`, implying pagination exists, but the query param to
+ * request further pages isn't documented anywhere and has never been observed in practice (every
+ * server tested so far returns everything on page 1, regardless of what query params are passed —
+ * page size limit is apparently well above 166). Best effort: follows the `page` convention (it
+ * matches the response's own `currentPage` field), and loudly warns if the total collected count
+ * doesn't match `eventsOverall` — that mismatch is the signal this guess turned out to be wrong,
+ * rather than silently dropping events past page 1 forever.
+ */
+async function getServerEvents(serverId) {
+  const first = await request(`/servers/${serverId}/events`, { auth: true });
+  const pages = first.pages ?? 1;
+  if (pages <= 1 || !Array.isArray(first.postedEvents)) return first;
+
+  const merged = { ...first, postedEvents: [...first.postedEvents] };
+  for (let page = 2; page <= pages; page += 1) {
+    const next = await request(`/servers/${serverId}/events?page=${page}`, { auth: true });
+    merged.postedEvents.push(...(next.postedEvents ?? []));
+  }
+
+  if (typeof merged.eventsOverall === 'number' && merged.postedEvents.length !== merged.eventsOverall) {
+    logger.warn(
+      { expected: merged.eventsOverall, got: merged.postedEvents.length, pages },
+      'Paginated server-events fetch did not collect the expected total — the ?page= query param guess may be wrong'
+    );
+  }
+
+  return merged;
 }
 
 /** GET /servers/{id}/scheduledevents — upcoming recurring events. Requires server API key. */

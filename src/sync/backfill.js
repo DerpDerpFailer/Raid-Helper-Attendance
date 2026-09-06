@@ -19,16 +19,9 @@ async function runBackfill() {
   }
 
   logger.info('Starting backfill of full event history');
+  // getServerEvents follows every page automatically (best effort — see its own doc comment for
+  // why the query param can't be verified, and the count-mismatch warning it logs if it's wrong).
   const raw = await client.getServerEvents(config.raidHelper.serverId);
-
-  // NOTE: the response reports `pages`/`currentPage`, implying pagination exists, but the query
-  // param to request further pages isn't documented and hasn't been observed (single-page so far
-  // for this server). If this ever fires, only page 1 was backfilled — investigate before trusting
-  // the count.
-  if (raw.pages && raw.pages > 1) {
-    logger.warn({ pages: raw.pages }, 'Server events response is paginated but pagination is not implemented — only the first page was backfilled');
-  }
-
   const eventIds = mapServerEventsList(raw).map((e) => e.id);
 
   logger.info({ count: eventIds.length }, 'Backfilling events');
