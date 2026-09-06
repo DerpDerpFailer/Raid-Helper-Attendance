@@ -59,7 +59,8 @@ All optional — omit everything to just see the current values.
 | `top-flop-size` | 10 | Number of entries shown in `/top` and `/flop` |
 | `poll-interval-minutes` | 20 | How often the bot polls the Raid-Helper API |
 
-Changes to period/eligibility/loot settings apply on the next `/sync now` or daily recompute, not
+Changes to `role`/period/eligibility/loot settings apply on the next `/sync now` (it reconciles the
+member roster first, then recomputes stats and loot) or the next daily recompute — not
 retroactively to already-frozen past periods. `poll-interval-minutes` is the one exception — it
 reschedules the polling job immediately, no `/sync now` or restart needed.
 
@@ -68,7 +69,14 @@ reschedules the polling job immediately, no `/sync now` or restart needed.
 Run `/setup role:<your raider role>` (e.g. "Member") right after deploying. Only members holding
 that role are tracked — this is what keeps bots, allies, and guests out of the rankings and loot
 list. Without it, the bot falls back to tracking every non-bot guild member, which is rarely what
-you want. Follow up with `/sync now` to apply it immediately.
+you want. Follow up with `/sync now` to apply it immediately (it re-checks every member's roles
+before recomputing anything, so the new tracked-member count reflects the role change right away).
+
+Sanity check: run `/sync status` afterwards and compare "Tracked members" to your actual role
+member count in Discord's member list. A mismatch almost always means either the role picked in
+`/setup` is wrong, or another instance of the bot is still running somewhere with the same token
+(see the warning in the deployment section below) and absorbed the `/setup`/`/sync` commands into
+its own separate database instead.
 
 ## Local development
 
@@ -93,6 +101,16 @@ request against `main` (`.github/workflows/ci.yml`).
 ## Deployment: GitHub + Portainer
 
 The bot is not built locally — Portainer builds and runs it directly from this GitHub repo.
+
+> **Run only one instance at a time.** Every instance (your laptop's `docker compose up`, a
+> Portainer stack, a second Portainer stack, …) that shares the same `DISCORD_TOKEN` connects to
+> Discord as the same bot. Discord then delivers each slash command to only one of the connected
+> instances, unpredictably — and each instance has its own independent SQLite volume, so whichever
+> one receives a `/setup` change saves it to *its own* database, not the other's. This can look like
+> a bug (a setting change that "doesn't take") when it's really just two instances silently
+> drifting apart. **Before starting a new instance (e.g. moving from local dev to Portainer, or
+> between two hosts), stop every other instance running with the same token first**, either with
+> `docker compose down` or by stopping the stack in Portainer.
 
 1. Push this repo to GitHub.
 2. In Portainer: **Stacks → Add stack → Repository**.
