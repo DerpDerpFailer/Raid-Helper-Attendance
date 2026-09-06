@@ -17,6 +17,10 @@ const DEFAULT_DROPOUT_THRESHOLDS = {
   alertRank: 15, alertScore: 0.15, criticalRank: 30, criticalScore: 0.30,
 };
 
+const LOOT_INELIGIBLE_AFTER_DAYS_KEY = 'loot_ineligible_after_days';
+const LOOT_RECOVERY_DAYS_KEY = 'loot_recovery_days';
+const DEFAULT_LOOT_THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7 };
+
 function get(key) {
   const db = getDb();
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
@@ -119,6 +123,24 @@ function setDropoutThresholds({
   if (criticalScore !== undefined) set(DROPOUT_CRITICAL_SCORE_KEY, String(criticalScore));
 }
 
+/**
+ * /eligibility-loot thresholds (set via /setup): ineligibleAfterDays consecutive days with zero
+ * sign-up drops eligibility; recoveryDays signed days (gaps under ineligibleAfterDays don't reset
+ * progress, a fresh ineligibleAfterDays-long gap does) are needed to regain it.
+ */
+function getLootThresholds() {
+  return {
+    ineligibleAfterDays: numberOr(get(LOOT_INELIGIBLE_AFTER_DAYS_KEY), DEFAULT_LOOT_THRESHOLDS.ineligibleAfterDays),
+    recoveryDays: numberOr(get(LOOT_RECOVERY_DAYS_KEY), DEFAULT_LOOT_THRESHOLDS.recoveryDays),
+  };
+}
+
+/** Only overrides the thresholds actually passed in; the rest keep their current value. */
+function setLootThresholds({ ineligibleAfterDays, recoveryDays }) {
+  if (ineligibleAfterDays !== undefined) set(LOOT_INELIGIBLE_AFTER_DAYS_KEY, String(ineligibleAfterDays));
+  if (recoveryDays !== undefined) set(LOOT_RECOVERY_DAYS_KEY, String(recoveryDays));
+}
+
 module.exports = {
   get,
   set,
@@ -134,4 +156,6 @@ module.exports = {
   setEligibilityMinDays,
   getDropoutThresholds,
   setDropoutThresholds,
+  getLootThresholds,
+  setLootThresholds,
 };

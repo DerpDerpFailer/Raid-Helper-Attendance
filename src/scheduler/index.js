@@ -4,6 +4,7 @@ const logger = require('../utils/logger');
 const { pollEvents } = require('./pollEvents');
 const { reconcileMembers } = require('./reconcileMembers');
 const { snapshotStats } = require('./snapshotStats');
+const { processLootEligibility } = require('../stats/lootEligibility');
 
 function safeRun(name, fn) {
   return async () => {
@@ -28,7 +29,8 @@ function start(client) {
   }));
 
   cron.schedule('5 3 * * *', safeRun('snapshotStats', snapshotStats));
-  logger.info('Scheduled daily member reconciliation and stats snapshot');
+  cron.schedule('10 3 * * *', safeRun('processLootEligibility', processLootEligibility));
+  logger.info('Scheduled daily member reconciliation, stats snapshot, and loot eligibility processing');
 }
 
 module.exports = { start };

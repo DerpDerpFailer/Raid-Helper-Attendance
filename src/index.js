@@ -8,6 +8,7 @@ const { registerInteractionHandler } = require('./discord/interactionHandler');
 const { runBackfill } = require('./sync/backfill');
 const { reconcileMembers } = require('./scheduler/reconcileMembers');
 const { snapshotStats } = require('./scheduler/snapshotStats');
+const { processLootEligibility } = require('./stats/lootEligibility');
 const scheduler = require('./scheduler');
 
 async function main() {
@@ -33,8 +34,9 @@ async function main() {
       const guild = await client.guilds.fetch(config.discord.guildId);
       await reconcileMembers(guild);
       snapshotStats();
+      processLootEligibility();
     } catch (err) {
-      logger.error({ err: err.message }, 'Initial member reconciliation / stats snapshot failed, will retry on next daily cron or manual /sync now');
+      logger.error({ err: err.message }, 'Initial member reconciliation / stats snapshot / loot processing failed, will retry on next daily cron or manual /sync now');
     }
 
     scheduler.start(client);

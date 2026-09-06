@@ -9,135 +9,128 @@ const PERIOD_MODE_CHOICES = [
 
 const data = new SlashCommandBuilder()
   .setName('setup')
-  .setDescription('Admin: configure the bot for this server')
+  .setDescription('Admin: configure the bot — fill in only the setting(s) you want to change')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  .addSubcommand((sub) => sub
+  .addRoleOption((opt) => opt
     .setName('role')
-    .setDescription('Set which role marks a real tracked member (excludes bots, allies, guests)')
-    .addRoleOption((opt) => opt
-      .setName('role')
-      .setDescription('The role your active raiders have (e.g. "Member")')
-      .setRequired(true)))
-  .addSubcommand((sub) => sub
-    .setName('score-weight')
-    .setDescription('Set the Global Score weighting between presence and sign-up (defaults to 70/30)')
-    .addIntegerOption((opt) => opt
-      .setName('presence')
-      .setDescription('Presence weight in % — sign-up gets the rest (e.g. 70 = 70% presence / 30% sign-up)')
-      .setMinValue(0)
-      .setMaxValue(100)
-      .setRequired(true)))
-  .addSubcommand((sub) => sub
-    .setName('period')
-    .setDescription('Set the cadence used for rankings and /dropouts comparisons (default: week)')
-    .addStringOption((opt) => opt
-      .setName('mode')
-      .setDescription('Period cadence')
-      .setRequired(true)
-      .addChoices(...PERIOD_MODE_CHOICES))
-    .addIntegerOption((opt) => opt
-      .setName('rolling-days')
-      .setDescription('Window size in days — only used when mode is "Rolling N-day window" (default 30)')
-      .setMinValue(1)
-      .setMaxValue(365)))
-  .addSubcommand((sub) => sub
-    .setName('eligibility')
-    .setDescription('Set the minimum tenure (days) before a member appears in rankings (default: 14)')
-    .addIntegerOption((opt) => opt
-      .setName('min-days')
-      .setDescription('Minimum days of tenure required')
-      .setMinValue(0)
-      .setMaxValue(365)
-      .setRequired(true)))
-  .addSubcommand((sub) => sub
-    .setName('dropout-thresholds')
-    .setDescription('Set the /dropouts Alert/Critical thresholds (omit an option to leave it unchanged)')
-    .addIntegerOption((opt) => opt
-      .setName('alert-rank')
-      .setDescription('Rank drop that triggers Alert (default 15)')
-      .setMinValue(1))
-    .addNumberOption((opt) => opt
-      .setName('alert-score')
-      .setDescription('Score drop that triggers Alert, 0-1 (default 0.15)')
-      .setMinValue(0)
-      .setMaxValue(1))
-    .addIntegerOption((opt) => opt
-      .setName('critical-rank')
-      .setDescription('Rank drop that triggers Critical (default 30)')
-      .setMinValue(1))
-    .addNumberOption((opt) => opt
-      .setName('critical-score')
-      .setDescription('Score drop that triggers Critical, 0-1 (default 0.30)')
-      .setMinValue(0)
-      .setMaxValue(1)));
+    .setDescription('Which role marks a real tracked member (excludes bots, allies, guests)'))
+  .addIntegerOption((opt) => opt
+    .setName('score-weight-presence')
+    .setDescription('Global Score: presence weight in %, sign-up gets the rest (default 70)')
+    .setMinValue(0)
+    .setMaxValue(100))
+  .addStringOption((opt) => opt
+    .setName('period-mode')
+    .setDescription('Cadence used for rankings and /dropouts comparisons (default: week)')
+    .addChoices(...PERIOD_MODE_CHOICES))
+  .addIntegerOption((opt) => opt
+    .setName('period-rolling-days')
+    .setDescription('Window size in days — only used when period-mode is "Rolling" (default 30)')
+    .setMinValue(1)
+    .setMaxValue(365))
+  .addIntegerOption((opt) => opt
+    .setName('eligibility-min-days')
+    .setDescription('Minimum days of tenure before a member appears in rankings (default 14)')
+    .setMinValue(0)
+    .setMaxValue(365))
+  .addIntegerOption((opt) => opt
+    .setName('dropout-alert-rank')
+    .setDescription('/dropouts: rank drop that triggers Alert (default 15)')
+    .setMinValue(1))
+  .addNumberOption((opt) => opt
+    .setName('dropout-alert-score')
+    .setDescription('/dropouts: score drop that triggers Alert, 0-1 (default 0.15)')
+    .setMinValue(0)
+    .setMaxValue(1))
+  .addIntegerOption((opt) => opt
+    .setName('dropout-critical-rank')
+    .setDescription('/dropouts: rank drop that triggers Critical (default 30)')
+    .setMinValue(1))
+  .addNumberOption((opt) => opt
+    .setName('dropout-critical-score')
+    .setDescription('/dropouts: score drop that triggers Critical, 0-1 (default 0.30)')
+    .setMinValue(0)
+    .setMaxValue(1))
+  .addIntegerOption((opt) => opt
+    .setName('loot-ineligible-after-days')
+    .setDescription('/loot: consecutive days with zero sign-up before dropping eligibility (default 3)')
+    .setMinValue(1)
+    .setMaxValue(60))
+  .addIntegerOption((opt) => opt
+    .setName('loot-recovery-days')
+    .setDescription('/loot: signed days needed to regain eligibility (default 7)')
+    .setMinValue(1)
+    .setMaxValue(60));
 
 async function execute(interaction) {
-  const sub = interaction.options.getSubcommand();
+  const changes = [];
 
-  if (sub === 'role') {
-    const role = interaction.options.getRole('role');
+  const role = interaction.options.getRole('role');
+  if (role !== null) {
     settingsRepo.setMonitoredRoleId(role.id);
-    await interaction.reply({
-      ephemeral: true,
-      content: `Tracked-member role set to **${role.name}**. Run \`/sync now\` to re-sync membership and stats with this change.`,
-    });
-    return;
+    changes.push(`Tracked-member role → **${role.name}**`);
   }
 
-  if (sub === 'score-weight') {
-    const presencePercent = interaction.options.getInteger('presence');
+  const presencePercent = interaction.options.getInteger('score-weight-presence');
+  if (presencePercent !== null) {
     settingsRepo.setScoreWeights(presencePercent / 100);
-    await interaction.reply({
-      ephemeral: true,
-      content: `Global Score weighting set to **${presencePercent}% presence / ${100 - presencePercent}% sign-up**. Run \`/sync now\` to recompute the current period with this change.`,
-    });
-    return;
+    changes.push(`Global Score weighting → **${presencePercent}% presence / ${100 - presencePercent}% sign-up**`);
   }
 
-  if (sub === 'period') {
-    const mode = interaction.options.getString('mode');
-    const rollingDays = interaction.options.getInteger('rolling-days');
-    settingsRepo.setPeriodMode(mode);
-    if (rollingDays !== null) settingsRepo.setPeriodRollingDays(rollingDays);
-
-    const detail = mode === 'rolling' ? ` (${rollingDays ?? settingsRepo.getPeriodRollingDays()}-day window)` : '';
-    await interaction.reply({
-      ephemeral: true,
-      content: `Period cadence set to **${mode}**${detail}. Run \`/sync now\` to recompute stats under the new cadence — note this starts a fresh comparison history for /dropouts (the previous period was computed under the old cadence).`,
-    });
-    return;
+  const periodMode = interaction.options.getString('period-mode');
+  if (periodMode !== null) {
+    settingsRepo.setPeriodMode(periodMode);
+    changes.push(`Period cadence → **${periodMode}**`);
   }
 
-  if (sub === 'eligibility') {
-    const minDays = interaction.options.getInteger('min-days');
-    settingsRepo.setEligibilityMinDays(minDays);
-    await interaction.reply({
-      ephemeral: true,
-      content: `Ranking eligibility set to **${minDays}+ days** of tenure. Run \`/sync now\` to apply immediately.`,
-    });
-    return;
+  const periodRollingDays = interaction.options.getInteger('period-rolling-days');
+  if (periodRollingDays !== null) {
+    settingsRepo.setPeriodRollingDays(periodRollingDays);
+    changes.push(`Rolling window size → **${periodRollingDays} days**`);
   }
 
-  if (sub === 'dropout-thresholds') {
-    const overrides = {
-      alertRank: interaction.options.getInteger('alert-rank') ?? undefined,
-      alertScore: interaction.options.getNumber('alert-score') ?? undefined,
-      criticalRank: interaction.options.getInteger('critical-rank') ?? undefined,
-      criticalScore: interaction.options.getNumber('critical-score') ?? undefined,
-    };
-    const changed = Object.values(overrides).some((v) => v !== undefined);
-    if (changed) settingsRepo.setDropoutThresholds(overrides);
-
-    const t = settingsRepo.getDropoutThresholds();
-    await interaction.reply({
-      ephemeral: true,
-      content: [
-        changed ? 'Dropout thresholds updated.' : 'Current dropout thresholds (nothing changed):',
-        `Alert: rank drop ≥ ${t.alertRank} OR score drop ≥ ${t.alertScore}`,
-        `Critical: rank drop ≥ ${t.criticalRank} OR score drop ≥ ${t.criticalScore}`,
-      ].join('\n'),
-    });
+  const eligibilityMinDays = interaction.options.getInteger('eligibility-min-days');
+  if (eligibilityMinDays !== null) {
+    settingsRepo.setEligibilityMinDays(eligibilityMinDays);
+    changes.push(`Ranking eligibility → **${eligibilityMinDays}+ days tenure**`);
   }
+
+  const dropoutOverrides = {
+    alertRank: interaction.options.getInteger('dropout-alert-rank') ?? undefined,
+    alertScore: interaction.options.getNumber('dropout-alert-score') ?? undefined,
+    criticalRank: interaction.options.getInteger('dropout-critical-rank') ?? undefined,
+    criticalScore: interaction.options.getNumber('dropout-critical-score') ?? undefined,
+  };
+  const dropoutChanged = Object.values(dropoutOverrides).some((v) => v !== undefined);
+  if (dropoutChanged) {
+    settingsRepo.setDropoutThresholds(dropoutOverrides);
+    changes.push('Dropout thresholds updated');
+  }
+
+  const lootOverrides = {
+    ineligibleAfterDays: interaction.options.getInteger('loot-ineligible-after-days') ?? undefined,
+    recoveryDays: interaction.options.getInteger('loot-recovery-days') ?? undefined,
+  };
+  const lootChanged = Object.values(lootOverrides).some((v) => v !== undefined);
+  if (lootChanged) {
+    settingsRepo.setLootThresholds(lootOverrides);
+    changes.push('Loot eligibility thresholds updated');
+  }
+
+  const t = settingsRepo.getDropoutThresholds();
+  const lt = settingsRepo.getLootThresholds();
+  const currentSummary = [
+    `Period cadence: **${settingsRepo.getPeriodMode()}**${settingsRepo.getPeriodMode() === 'rolling' ? ` (${settingsRepo.getPeriodRollingDays()}d)` : ''}`,
+    `Ranking eligibility: **${settingsRepo.getEligibilityMinDays()}+ days**`,
+    `Dropout thresholds — Alert: rank ≥${t.alertRank} or score ≥${t.alertScore}, Critical: rank ≥${t.criticalRank} or score ≥${t.criticalScore}`,
+    `Loot eligibility — drops after ${lt.ineligibleAfterDays} consecutive missed days, recovers after ${lt.recoveryDays} signed days`,
+  ];
+
+  const lines = changes.length > 0
+    ? ['Updated:', ...changes, '', 'Run `/sync now` to apply immediately.', '', 'Current settings:', ...currentSummary]
+    : ['Nothing changed — no options were provided. Current settings:', ...currentSummary];
+
+  await interaction.reply({ ephemeral: true, content: lines.join('\n') });
 }
 
 module.exports = { data, execute };
