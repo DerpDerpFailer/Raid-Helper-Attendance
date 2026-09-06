@@ -43,6 +43,13 @@ describe('db/repositories/settingsRepo', () => {
     expect(settingsRepo.getPollIntervalMinutes()).toBe(5);
   });
 
+  it('commands role defaults to unset (admins-only) until /setup commands-role overrides it', () => {
+    expect(settingsRepo.getCommandsRoleId()).toBeNull();
+
+    settingsRepo.setCommandsRoleId('role-123');
+    expect(settingsRepo.getCommandsRoleId()).toBe('role-123');
+  });
+
   it('only overrides the dropout thresholds explicitly passed to setDropoutThresholds', () => {
     settingsRepo.setDropoutThresholds({ alertRank: 10 });
     expect(settingsRepo.getDropoutThresholds()).toEqual({

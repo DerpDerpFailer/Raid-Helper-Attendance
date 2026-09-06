@@ -31,15 +31,28 @@ guild.
 
 | Command | Who | What it does |
 |---|---|---|
-| `/top axis:<global\|presence\|sign-up>` | everyone | Top 10 ranked members on the chosen axis |
-| `/flop axis:<global\|presence\|sign-up\|absence>` | everyone | Bottom 10 on the chosen axis (`absence` = who marks themselves absent most) |
 | `/stats [member]` | everyone | One member's rates, ranks, and trend vs. the previous period |
-| `/dropouts` | everyone | Members whose Global Score dropped enough to flag Alert/Critical this period |
-| `/nosignup [days]` | everyone | Tracked members with zero sign-up (any status) in a rolling N-day window (default 7) |
-| `/eligibility-loot view:<ineligible\|all>` | everyone | Loot eligibility list, with recovery progress |
-| `/eligibility-loot-detail member:<user>` | everyone | Day-by-day explanation of why one member is (or isn't) loot-eligible |
+| `/top axis:<global\|presence\|sign-up>` | commands-role | Top 10 ranked members on the chosen axis |
+| `/flop axis:<global\|presence\|sign-up\|absence>` | commands-role | Bottom 10 on the chosen axis (`absence` = who marks themselves absent most) |
+| `/dropouts` | commands-role | Members whose Global Score dropped enough to flag Alert/Critical this period |
+| `/nosignup [days]` | commands-role | Tracked members with zero sign-up (any status) in a rolling N-day window (default 7) |
+| `/eligibility-loot view:<ineligible\|all>` | commands-role | Loot eligibility list, with recovery progress |
+| `/eligibility-loot-detail member:<user>` | commands-role | Day-by-day explanation of why one member is (or isn't) loot-eligible |
 | `/sync action:<status\|now>` | Manage Server | Inspect sync state, or force an immediate poll + recompute |
 | `/setup [...]` | Manage Server | Configure the bot — every option is optional, fill in only what you want to change (see below) |
+
+### Who can run what
+
+`/stats` is always open to everyone — no configuration needed. Every other command except
+`/sync`/`/setup` is gated behind the **commands-role** setting:
+
+- Admins (**Manage Server** permission) can always run every command, regardless of this setting.
+- Until an admin sets a role via `/setup commands-role:<role>`, nobody else can run those commands
+  at all — this is the safe-by-default starting point.
+- Once a role is set, any member holding it can run them too (in addition to admins).
+
+`/sync` and `/setup` are separate: they're gated by Discord's own **Manage Server** permission
+directly (not by `commands-role`), so they're always admin-only.
 
 ### `/setup` options
 
@@ -48,6 +61,7 @@ All optional — omit everything to just see the current values.
 | Option | Default | Affects |
 |---|---|---|
 | `role` | none (falls back to "every non-bot member") | Which role marks a real tracked member |
+| `commands-role` | none (admins only) | Which role, besides admins, may run the bot's reporting commands |
 | `score-weight-presence` | 70 (%) | Global Score weighting; sign-up gets the rest |
 | `period-mode` | `week` | `week` \| `month` \| `rolling` — cadence for rankings and `/dropouts` |
 | `period-rolling-days` | 30 | Window size, only used when `period-mode` is `rolling` |
@@ -83,9 +97,12 @@ its own separate database instead.
 ```bash
 npm install
 cp .env.example .env   # fill in the values below
-npm run deploy-commands
 npm start
 ```
+
+`npm start` registers the slash commands with Discord on every boot, so there's no separate
+deploy-commands step. `npm run deploy-commands` still exists standalone if you ever want to
+re-register commands without booting the full bot.
 
 You need, at minimum:
 - A Discord application + bot (Discord Developer Portal): `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`.
@@ -139,6 +156,10 @@ Pick one, depending on how hands-off you want this:
   over instant webhooks.
 
 Start with the manual option; switch to the webhook once the bot is stable.
+
+Slash commands are re-registered with Discord automatically on every boot (`src/index.js`), so a
+command or option added in a new version shows up after a normal redeploy — no separate manual
+step needed.
 
 ## Data model
 

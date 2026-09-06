@@ -2,6 +2,7 @@ const { Events } = require('discord.js');
 const config = require('./config');
 const logger = require('./utils/logger');
 const { migrate } = require('./db/migrate');
+const { deployCommands } = require('./discord/commands/deploy');
 const { createClient } = require('./discord/client');
 const { registerMemberEvents } = require('./discord/memberEvents');
 const { registerInteractionHandler } = require('./discord/interactionHandler');
@@ -14,6 +15,15 @@ const scheduler = require('./scheduler');
 async function main() {
   migrate();
   logger.info('Database ready');
+
+  // Re-registers the full command list on every boot, so a command/option added in this version
+  // shows up in Discord without a separate manual step. A bulk overwrite with unchanged
+  // definitions is a no-op on Discord's side, so this is safe to run every time.
+  try {
+    await deployCommands();
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to deploy slash commands, previous definitions (if any) remain in place');
+  }
 
   const client = createClient();
   registerMemberEvents(client);

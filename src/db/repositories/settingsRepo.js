@@ -23,6 +23,7 @@ const DEFAULT_LOOT_THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7 };
 
 const TOP_FLOP_SIZE_KEY = 'top_flop_size';
 const POLL_INTERVAL_MINUTES_KEY = 'poll_interval_minutes';
+const COMMANDS_ROLE_ID_KEY = 'commands_role_id';
 
 function get(key) {
   const db = getDb();
@@ -166,6 +167,20 @@ function setPollIntervalMinutes(minutes) {
   set(POLL_INTERVAL_MINUTES_KEY, String(minutes));
 }
 
+/**
+ * The role allowed to use the bot's reporting commands (set via /setup commands-role), besides
+ * admins (Manage Server permission) who can always use every command regardless. Until this is
+ * set, nobody but admins can use those commands at all — see discord/permissions.js. /stats is
+ * deliberately never gated by this.
+ */
+function getCommandsRoleId() {
+  return get(COMMANDS_ROLE_ID_KEY);
+}
+
+function setCommandsRoleId(roleId) {
+  set(COMMANDS_ROLE_ID_KEY, roleId);
+}
+
 module.exports = {
   get,
   set,
@@ -187,4 +202,6 @@ module.exports = {
   setTopFlopSize,
   getPollIntervalMinutes,
   setPollIntervalMinutes,
+  getCommandsRoleId,
+  setCommandsRoleId,
 };

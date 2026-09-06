@@ -15,6 +15,9 @@ const data = new SlashCommandBuilder()
   .addRoleOption((opt) => opt
     .setName('role')
     .setDescription('Which role marks a real tracked member (excludes bots, allies, guests)'))
+  .addRoleOption((opt) => opt
+    .setName('commands-role')
+    .setDescription('Which role may use the bot\'s reporting commands, besides admins (unset = admins only)'))
   .addIntegerOption((opt) => opt
     .setName('score-weight-presence')
     .setDescription('Global Score: presence weight in %, sign-up gets the rest (default 70)')
@@ -82,6 +85,12 @@ async function execute(interaction) {
     changes.push(`Tracked-member role → **${role.name}**`);
   }
 
+  const commandsRole = interaction.options.getRole('commands-role');
+  if (commandsRole !== null) {
+    settingsRepo.setCommandsRoleId(commandsRole.id);
+    changes.push(`Commands role → **${commandsRole.name}**`);
+  }
+
   const presencePercent = interaction.options.getInteger('score-weight-presence');
   if (presencePercent !== null) {
     settingsRepo.setScoreWeights(presencePercent / 100);
@@ -143,7 +152,9 @@ async function execute(interaction) {
 
   const t = settingsRepo.getDropoutThresholds();
   const lt = settingsRepo.getLootThresholds();
+  const commandsRoleId = settingsRepo.getCommandsRoleId();
   const currentSummary = [
+    `Commands role: ${commandsRoleId ? `<@&${commandsRoleId}>` : '**not set** — only admins (Manage Server) can use commands right now'}`,
     `Period cadence: **${settingsRepo.getPeriodMode()}**${settingsRepo.getPeriodMode() === 'rolling' ? ` (${settingsRepo.getPeriodRollingDays()}d)` : ''}`,
     `Ranking eligibility: **${settingsRepo.getEligibilityMinDays()}+ days**`,
     `Dropout thresholds — Alert: rank ≥${t.alertRank} or score ≥${t.alertScore}, Critical: rank ≥${t.criticalRank} or score ≥${t.criticalScore}`,

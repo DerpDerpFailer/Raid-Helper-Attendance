@@ -34,4 +34,4 @@ async function execute(interaction) {
   await interaction.reply({ embeds: [embed] });
 }
 
-module.exports = { data, execute };
+module.exports = { data, execute, restricted: true };
