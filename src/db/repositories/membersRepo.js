@@ -1,6 +1,15 @@
 const { getDb } = require('../connection');
 
-/** Ensures a member row exists (placeholder if unknown yet), to satisfy the signups FK. */
+/**
+ * Ensures a member row exists (placeholder if unknown yet), to satisfy the signups FK — called
+ * while syncing sign-ups, which on a fresh deploy happens during backfill, *before* the first
+ * reconciliation ever runs. Deliberately inserted as is_active=0/is_tracked=0 (not 1): reconcile
+ * Members only calls recordJoin (which sets the real Discord joined_at) for members it finds with
+ * is_active=0, so a placeholder inserted as already "active" would keep its bogus
+ * joined_at=now(placeholder creation time) forever — exactly the bug that made ~every real member
+ * look brand new after the historical backfill ran. Leaving it inactive here means the very next
+ * reconciliation pass "discovers" them properly and sets their real joined_at.
+ */
 function ensureExists(id, displayName) {
   const db = getDb();
   const existing = db.prepare('SELECT id FROM members WHERE id = ?').get(id);
@@ -8,8 +17,8 @@ function ensureExists(id, displayName) {
 
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO members (id, display_name, is_active, joined_at, first_seen_at, updated_at)
-    VALUES (?, ?, 1, ?, ?, ?)
+    INSERT INTO members (id, display_name, is_active, is_tracked, joined_at, first_seen_at, updated_at)
+    VALUES (?, ?, 0, 0, ?, ?, ?)
   `).run(id, displayName || id, now, now, now);
 }
 
