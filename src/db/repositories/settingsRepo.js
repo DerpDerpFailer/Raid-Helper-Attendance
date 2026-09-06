@@ -21,6 +21,9 @@ const LOOT_INELIGIBLE_AFTER_DAYS_KEY = 'loot_ineligible_after_days';
 const LOOT_RECOVERY_DAYS_KEY = 'loot_recovery_days';
 const DEFAULT_LOOT_THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7 };
 
+const TOP_FLOP_SIZE_KEY = 'top_flop_size';
+const POLL_INTERVAL_MINUTES_KEY = 'poll_interval_minutes';
+
 function get(key) {
   const db = getDb();
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
@@ -141,6 +144,28 @@ function setLootThresholds({ ineligibleAfterDays, recoveryDays }) {
   if (recoveryDays !== undefined) set(LOOT_RECOVERY_DAYS_KEY, String(recoveryDays));
 }
 
+/** Number of entries shown in /top and /flop (set via /setup). Falls back to TOP_FLOP_SIZE. */
+function getTopFlopSize() {
+  return numberOr(get(TOP_FLOP_SIZE_KEY), config.stats.topFlopSize);
+}
+
+function setTopFlopSize(size) {
+  set(TOP_FLOP_SIZE_KEY, String(size));
+}
+
+/**
+ * How often (minutes) the bot polls the Raid-Helper API (set via /setup). Falls back to
+ * POLL_INTERVAL_MINUTES. Changing this only takes effect once scheduler.scheduleEventPolling()
+ * is called again — see discord/commands/setup.js.
+ */
+function getPollIntervalMinutes() {
+  return numberOr(get(POLL_INTERVAL_MINUTES_KEY), config.sync.pollIntervalMinutes);
+}
+
+function setPollIntervalMinutes(minutes) {
+  set(POLL_INTERVAL_MINUTES_KEY, String(minutes));
+}
+
 module.exports = {
   get,
   set,
@@ -158,4 +183,8 @@ module.exports = {
   setDropoutThresholds,
   getLootThresholds,
   setLootThresholds,
+  getTopFlopSize,
+  setTopFlopSize,
+  getPollIntervalMinutes,
+  setPollIntervalMinutes,
 };

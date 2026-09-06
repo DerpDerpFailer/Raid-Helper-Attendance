@@ -25,16 +25,22 @@ describe('db/repositories/settingsRepo', () => {
     expect(settingsRepo.getDropoutThresholds()).toEqual({
       alertRank: 15, alertScore: 0.15, criticalRank: 30, criticalScore: 0.30,
     });
+    expect(settingsRepo.getTopFlopSize()).toBe(10); // config.js default (TOP_FLOP_SIZE unset)
+    expect(settingsRepo.getPollIntervalMinutes()).toBe(20); // config.js default (POLL_INTERVAL_MINUTES unset)
   });
 
   it('persists overrides made via the /setup setters', () => {
     settingsRepo.setPeriodMode('rolling');
     settingsRepo.setPeriodRollingDays(45);
     settingsRepo.setEligibilityMinDays(21);
+    settingsRepo.setTopFlopSize(15);
+    settingsRepo.setPollIntervalMinutes(5);
 
     expect(settingsRepo.getPeriodMode()).toBe('rolling');
     expect(settingsRepo.getPeriodRollingDays()).toBe(45);
     expect(settingsRepo.getEligibilityMinDays()).toBe(21);
+    expect(settingsRepo.getTopFlopSize()).toBe(15);
+    expect(settingsRepo.getPollIntervalMinutes()).toBe(5);
   });
 
   it('only overrides the dropout thresholds explicitly passed to setDropoutThresholds', () => {

@@ -1,5 +1,4 @@
 const { EmbedBuilder } = require('discord.js');
-const config = require('../../config');
 const settingsRepo = require('../../db/repositories/settingsRepo');
 const { buildDescription } = require('./truncate');
 
@@ -27,9 +26,11 @@ function formatRow(row, axis, index) {
   return `${medal} **${row.display_name}** — ${pct(row.response_rate)} sign-up`;
 }
 
-function buildTopFlopEmbed({ kind, axis, rows, period }) {
+function buildTopFlopEmbed({
+  kind, axis, rows, period, size = settingsRepo.getTopFlopSize(),
+}) {
   const icon = kind === 'top' ? '🏆' : '📉';
-  const title = `${icon} ${kind === 'top' ? 'Top' : 'Flop'} ${config.stats.topFlopSize} — ${AXIS_LABEL[axis]}`;
+  const title = `${icon} ${kind === 'top' ? 'Top' : 'Flop'} ${size} — ${AXIS_LABEL[axis]}`;
 
   const embed = new EmbedBuilder()
     .setTitle(title)

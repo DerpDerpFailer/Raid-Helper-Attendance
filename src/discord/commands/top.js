@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const statsRepo = require('../../db/repositories/statsRepo');
+const settingsRepo = require('../../db/repositories/settingsRepo');
 const periods = require('../../stats/periods');
-const config = require('../../config');
 const { buildTopFlopEmbed } = require('../embeds/topFlopEmbed');
 
 const AXIS_CHOICES = [
@@ -12,7 +12,7 @@ const AXIS_CHOICES = [
 
 const data = new SlashCommandBuilder()
   .setName('top')
-  .setDescription(`Show the top ${config.stats.topFlopSize} members for the current period`)
+  .setDescription('Show the top members for the current period')
   .addStringOption((opt) => opt.setName('axis').setDescription('Ranking axis').addChoices(...AXIS_CHOICES));
 
 async function execute(interaction) {
@@ -25,8 +25,11 @@ async function execute(interaction) {
     return;
   }
 
-  const rows = statsRepo.getTop(periodRow.id, axis, config.stats.topFlopSize);
-  const embed = buildTopFlopEmbed({ kind: 'top', axis, rows, period });
+  const size = settingsRepo.getTopFlopSize();
+  const rows = statsRepo.getTop(periodRow.id, axis, size);
+  const embed = buildTopFlopEmbed({
+    kind: 'top', axis, rows, period, size,
+  });
   await interaction.reply({ embeds: [embed] });
 }
 

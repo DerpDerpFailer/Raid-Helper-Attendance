@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const settingsRepo = require('../../db/repositories/settingsRepo');
+const scheduler = require('../../scheduler');
 
 const PERIOD_MODE_CHOICES = [
   { name: 'Week (Monday-Sunday)', value: 'week' },
@@ -60,7 +61,17 @@ const data = new SlashCommandBuilder()
     .setName('loot-recovery-days')
     .setDescription('/loot: signed days needed to regain eligibility (default 7)')
     .setMinValue(1)
-    .setMaxValue(60));
+    .setMaxValue(60))
+  .addIntegerOption((opt) => opt
+    .setName('top-flop-size')
+    .setDescription('Number of entries shown in /top and /flop (default 10)')
+    .setMinValue(1)
+    .setMaxValue(25))
+  .addIntegerOption((opt) => opt
+    .setName('poll-interval-minutes')
+    .setDescription('How often (minutes) the bot polls the Raid-Helper API (default 20)')
+    .setMinValue(1)
+    .setMaxValue(59));
 
 async function execute(interaction) {
   const changes = [];
@@ -117,6 +128,19 @@ async function execute(interaction) {
     changes.push('Loot eligibility thresholds updated');
   }
 
+  const topFlopSize = interaction.options.getInteger('top-flop-size');
+  if (topFlopSize !== null) {
+    settingsRepo.setTopFlopSize(topFlopSize);
+    changes.push(`/top and /flop size → **${topFlopSize}**`);
+  }
+
+  const pollIntervalMinutes = interaction.options.getInteger('poll-interval-minutes');
+  if (pollIntervalMinutes !== null) {
+    settingsRepo.setPollIntervalMinutes(pollIntervalMinutes);
+    scheduler.scheduleEventPolling(); // takes effect immediately, no restart/`/sync now` needed
+    changes.push(`Poll interval → **every ${pollIntervalMinutes} minutes** (already rescheduled)`);
+  }
+
   const t = settingsRepo.getDropoutThresholds();
   const lt = settingsRepo.getLootThresholds();
   const currentSummary = [
@@ -124,6 +148,8 @@ async function execute(interaction) {
     `Ranking eligibility: **${settingsRepo.getEligibilityMinDays()}+ days**`,
     `Dropout thresholds — Alert: rank ≥${t.alertRank} or score ≥${t.alertScore}, Critical: rank ≥${t.criticalRank} or score ≥${t.criticalScore}`,
     `Loot eligibility — drops after ${lt.ineligibleAfterDays} consecutive missed days, recovers after ${lt.recoveryDays} signed days`,
+    `/top and /flop size: **${settingsRepo.getTopFlopSize()}**`,
+    `Poll interval: **every ${settingsRepo.getPollIntervalMinutes()} minutes**`,
   ];
 
   const lines = changes.length > 0
