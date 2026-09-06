@@ -54,9 +54,12 @@ All optional — omit everything to just see the current values.
 | `dropout-critical-rank` / `dropout-critical-score` | 30 / 0.30 | `/dropouts` Critical threshold |
 | `loot-ineligible-after-days` | 3 | Consecutive missed days before loot eligibility drops |
 | `loot-recovery-days` | 7 | Signed days needed to (re)gain loot eligibility |
+| `top-flop-size` | 10 | Number of entries shown in `/top` and `/flop` |
+| `poll-interval-minutes` | 20 | How often the bot polls the Raid-Helper API |
 
 Changes to period/eligibility/loot settings apply on the next `/sync now` or daily recompute, not
-retroactively to already-frozen past periods.
+retroactively to already-frozen past periods. `poll-interval-minutes` is the one exception — it
+reschedules the polling job immediately, no `/sync now` or restart needed.
 
 ## First-time setup
 
@@ -125,8 +128,6 @@ tables: `members` (roster + tenure + tracked flag), `events` / `signups` (synced
 
 ## Known limitations / things to revisit
 
-- `TOP_FLOP_SIZE` and `POLL_INTERVAL_MINUTES` are still env-var-only (not yet in `/setup`) —
-  low-impact, ops-facing settings, deliberately left out for now.
 - `/servers/{id}/events` reports `pages`/`currentPage` fields implying pagination exists, but the
   query param to request further pages was never observed/documented — `sync/backfill.js` logs a
   warning if it ever sees more than one page, since only the first would get backfilled.
