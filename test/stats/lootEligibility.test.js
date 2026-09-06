@@ -11,6 +11,7 @@ const { migrate } = require('../../src/db/migrate');
 const { getDb } = require('../../src/db/connection');
 const { processLootEligibility, step, traceMemberHistory } = require('../../src/stats/lootEligibility');
 const lootRepo = require('../../src/db/repositories/lootRepo');
+const settingsRepo = require('../../src/db/repositories/settingsRepo');
 
 const THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7, recoveryGapDays: 2 };
 
@@ -280,5 +281,46 @@ describe('stats/lootEligibility traceMemberHistory (powers /eligibility-loot-det
     // The display window anchors on the more recent reset, not the older original drop.
     expect(result.trace.filter((e) => e.day >= result.lastResetDay).map((e) => e.day))
       .toEqual(['2026-09-15', '2026-09-16', '2026-09-17']);
+  });
+});
+
+describe('stats/lootEligibility processLootEligibility — reprocessing after a /setup loot-threshold change', () => {
+  it('resetProcessingState() forces a full replay under the new recoveryGapDays, matching traceMemberHistory (the Hallo bug)', () => {
+    seedMember('hallo', 'Hallo', '2026-01-01T00:00:00.000Z');
+    const days = [
+      '2026-10-01', '2026-10-02', '2026-10-03', // 3 missed -> drops
+      '2026-10-04', // signed (accum=1 either way)
+      '2026-10-05', // missed — tolerated under the default recoveryGapDays=2, NOT under 0
+      '2026-10-06', '2026-10-07', '2026-10-08', // signed
+    ];
+    const signed = new Set(['2026-10-04', '2026-10-06', '2026-10-07', '2026-10-08']);
+    seedDaySequence('hallo', 'hallo', days, signed);
+
+    const now = new Date('2026-10-09T00:00:00.000Z');
+
+    // Process under the default thresholds (recoveryGapDays: 2) — the gap on 10-05 is tolerated.
+    processLootEligibility(now);
+    expect(lootRepo.getRow('hallo')).toMatchObject({ eligible: 0, accumulated_signed_days: 4 });
+
+    // Admin tightens recoveryGapDays to 0 via /setup — simulates settingsRepo.setLootThresholds.
+    settingsRepo.setLootThresholds({ recoveryGapDays: 0 });
+
+    // Without resetting last_processed_day, re-running is a no-op (nothing new to process): the
+    // stale accumulated_signed_days=4, computed under the old more permissive rule, survives —
+    // that's the bug, it now disagrees with what a fresh replay under the current rule would say.
+    processLootEligibility(now);
+    expect(lootRepo.getRow('hallo')).toMatchObject({ accumulated_signed_days: 4 });
+
+    // The fix: resetting processing state forces the next run to fully replay history under the
+    // new rule instead of trusting the stale cached progress.
+    lootRepo.resetProcessingState();
+    processLootEligibility(now);
+
+    const reprocessed = lootRepo.getRow('hallo');
+    expect(reprocessed).toMatchObject({ eligible: 0, accumulated_signed_days: 3 });
+
+    // And it now matches what /eligibility-loot-detail's always-fresh replay reports.
+    const trace = traceMemberHistory('hallo', now);
+    expect(trace.finalState.accumulatedSignedDays).toBe(reprocessed.accumulated_signed_days);
   });
 });

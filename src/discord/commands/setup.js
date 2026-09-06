@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const settingsRepo = require('../../db/repositories/settingsRepo');
+const lootRepo = require('../../db/repositories/lootRepo');
 const scheduler = require('../../scheduler');
 
 const PERIOD_MODE_CHOICES = [
@@ -140,7 +141,12 @@ async function execute(interaction) {
   const lootChanged = Object.values(lootOverrides).some((v) => v !== undefined);
   if (lootChanged) {
     settingsRepo.setLootThresholds(lootOverrides);
-    changes.push('Loot eligibility thresholds updated');
+    // Already-stored per-member progress was computed under the old thresholds — force a full
+    // history replay under the new ones on the next processing run, instead of only applying the
+    // change to days going forward (which would leave existing progress inconsistent with what
+    // /eligibility-loot-detail's always-fresh replay shows).
+    lootRepo.resetProcessingState();
+    changes.push('Loot eligibility thresholds updated — recovery history will be fully recalculated under the new rules on the next `/sync now` (or the daily recompute)');
   }
 
   const topFlopSize = interaction.options.getInteger('top-flop-size');

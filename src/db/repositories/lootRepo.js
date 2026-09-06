@@ -41,6 +41,17 @@ function getTrackedWithState() {
   `).all();
 }
 
+/**
+ * Clears every member's last_processed_day, so the next processLootEligibility() run treats them
+ * all as "never processed" and replays their full history from scratch under whatever thresholds
+ * are current — used when a /setup change to the loot thresholds means already-stored progress
+ * was computed under rules that no longer apply.
+ */
+function resetProcessingState() {
+  const db = getDb();
+  db.prepare('UPDATE loot_eligibility SET last_processed_day = NULL').run();
+}
+
 module.exports = {
-  getRow, upsertRow, getTrackedWithState,
+  getRow, upsertRow, getTrackedWithState, resetProcessingState,
 };
