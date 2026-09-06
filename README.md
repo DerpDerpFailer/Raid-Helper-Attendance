@@ -1,5 +1,7 @@
 # Raid-Helper Attendance Bot
 
+[![CI](https://github.com/DerpDerpFailer/raid-helper-attendance/actions/workflows/ci.yml/badge.svg)](https://github.com/DerpDerpFailer/raid-helper-attendance/actions/workflows/ci.yml)
+
 Discord bot that syncs sign-ups from the Raid-Helper premium API and computes attendance
 rankings, individual trends, dropout alerts, and a per-member loot eligibility state for a single
 guild.
@@ -85,7 +87,8 @@ You need, at minimum:
 - A Raid-Helper server API key: run `/apikey` in your Discord server (requires Raid-Helper
   Premium) to get `RAIDHELPER_API_KEY`, and `RAIDHELPER_SERVER_ID` is your guild id as well.
 
-Run the test suite with `npm test`.
+Run the test suite with `npm test`. GitHub Actions runs the same thing on every push and pull
+request against `main` (`.github/workflows/ci.yml`).
 
 ## Deployment: GitHub + Portainer
 
