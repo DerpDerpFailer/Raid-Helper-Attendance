@@ -112,3 +112,50 @@ describe('discord/embeds/lootDetailEmbed loot-amnesty-date narrative', () => {
     expect(embed.data.description).toContain('No event days have occurred since the `2026-06-01` loot amnesty yet');
   });
 });
+
+describe('discord/embeds/lootDetailEmbed currentVacation note', () => {
+  it('shows the return date and reason when the member is currently on vacation', () => {
+    const embed = build({
+      trace: [{
+        day: '2026-09-13', signed: true, eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 3,
+      }],
+      finalState: { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 3 },
+      currentVacation: { end_date: '2026-09-18', reason: 'Going to Bali' },
+    });
+
+    expect(embed.data.description).toContain('🌴 **Currently unavailable** — back `2026-09-18` (Going to Bali)');
+  });
+
+  it('omits the parenthetical reason when none was given', () => {
+    const embed = build({
+      trace: [{
+        day: '2026-09-13', signed: true, eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 3,
+      }],
+      finalState: { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 3 },
+      currentVacation: { end_date: '2026-09-18', reason: null },
+    });
+
+    expect(embed.data.description).toContain('🌴 **Currently unavailable** — back `2026-09-18`.');
+  });
+
+  it('says nothing about vacation when the member is not currently on one', () => {
+    const embed = build({
+      trace: [{
+        day: '2026-09-13', signed: true, eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 3,
+      }],
+      finalState: { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 3 },
+      currentVacation: null,
+    });
+
+    expect(embed.data.description).not.toContain('Currently unavailable');
+  });
+
+  it('still shows the vacation note even when there is no event history to evaluate yet', () => {
+    const embed = build({
+      trace: [],
+      currentVacation: { end_date: '2026-09-18', reason: null },
+    });
+
+    expect(embed.data.description).toContain('🌴 **Currently unavailable** — back `2026-09-18`.');
+  });
+});

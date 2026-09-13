@@ -54,6 +54,33 @@ function getExcludedDaysForMember(memberId) {
   return days;
 }
 
+/**
+ * Members currently within an ACTIVE declaration covering `today` ('YYYY-MM-DD'), as a Map keyed
+ * by member_id -> {start_date, end_date, reason} — used by /eligibility-loot view:all to show a
+ * dedicated "on vacation" section instead of leaving them mixed into eligible/ineligible.
+ */
+function getCurrentlyOnVacation(today) {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT member_id, start_date, end_date, reason FROM loot_vacations
+    WHERE status = 'active' AND start_date <= ? AND end_date >= ?
+    ORDER BY end_date ASC
+  `).all(today, today);
+  // ORDER BY end_date ASC + Map overwrite-on-insert means the entry kept for a member with more
+  // than one overlapping declaration is the one with the furthest (most informative) end date.
+  return new Map(rows.map((r) => [r.member_id, r]));
+}
+
+/** This one member's current ACTIVE declaration covering `today`, if any — for /eligibility-loot-detail. */
+function getCurrentVacationForMember(memberId, today) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM loot_vacations
+    WHERE member_id = ? AND status = 'active' AND start_date <= ? AND end_date >= ?
+    ORDER BY end_date DESC LIMIT 1
+  `).get(memberId, today, today);
+}
+
 module.exports = {
-  create, getById, cancel, getExcludedDaysForMember,
+  create, getById, cancel, getExcludedDaysForMember, getCurrentlyOnVacation, getCurrentVacationForMember,
 };

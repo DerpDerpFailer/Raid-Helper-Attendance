@@ -106,4 +106,61 @@ describe('db/repositories/vacationRepo', () => {
     seedMember('frank');
     expect(vacationRepo.getExcludedDaysForMember('frank').size).toBe(0);
   });
+
+  describe('getCurrentlyOnVacation() / getCurrentVacationForMember()', () => {
+    it('includes a member whose active declaration covers today, excludes one that does not', () => {
+      seedMember('grace');
+      seedMember('heidi');
+      vacationRepo.create({
+        memberId: 'grace', startDate: '2026-09-01', endDate: '2026-09-20', reason: 'Away',
+      });
+      vacationRepo.create({
+        memberId: 'heidi', startDate: '2026-01-01', endDate: '2026-01-05', reason: null,
+      }); // long over by the "today" used below
+
+      const today = '2026-09-14';
+      const onVacation = vacationRepo.getCurrentlyOnVacation(today);
+      expect(onVacation.has('grace')).toBe(true);
+      expect(onVacation.get('grace')).toMatchObject({ end_date: '2026-09-20', reason: 'Away' });
+      expect(onVacation.has('heidi')).toBe(false);
+
+      expect(vacationRepo.getCurrentVacationForMember('grace', today)).toMatchObject({ end_date: '2026-09-20' });
+      expect(vacationRepo.getCurrentVacationForMember('heidi', today)).toBeUndefined();
+    });
+
+    it('excludes a cancelled declaration even if today falls within its range', () => {
+      seedMember('ivan');
+      const vacation = vacationRepo.create({
+        memberId: 'ivan', startDate: '2026-09-10', endDate: '2026-09-20', reason: null,
+      });
+      const today = '2026-09-14';
+      expect(vacationRepo.getCurrentlyOnVacation(today).has('ivan')).toBe(true);
+
+      vacationRepo.cancel(vacation.id, 'test');
+      expect(vacationRepo.getCurrentlyOnVacation(today).has('ivan')).toBe(false);
+      expect(vacationRepo.getCurrentVacationForMember('ivan', today)).toBeUndefined();
+    });
+
+    it('excludes a member whose declaration does not cover today yet (future) or anymore (past)', () => {
+      seedMember('judy');
+      vacationRepo.create({
+        memberId: 'judy', startDate: '2026-10-01', endDate: '2026-10-05', reason: null,
+      }); // future
+      const today = '2026-09-14';
+      expect(vacationRepo.getCurrentlyOnVacation(today).has('judy')).toBe(false);
+    });
+
+    it('when overlapping active declarations exist for one member, picks the one with the furthest end date', () => {
+      seedMember('mallory');
+      vacationRepo.create({
+        memberId: 'mallory', startDate: '2026-09-10', endDate: '2026-09-15', reason: 'First',
+      });
+      vacationRepo.create({
+        memberId: 'mallory', startDate: '2026-09-12', endDate: '2026-09-25', reason: 'Second',
+      });
+
+      const result = vacationRepo.getCurrentVacationForMember('mallory', '2026-09-14');
+      expect(result.end_date).toBe('2026-09-25');
+    });
+  });
 });

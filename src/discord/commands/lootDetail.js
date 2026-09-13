@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { traceMemberHistory } = require('../../stats/lootEligibility');
+const vacationRepo = require('../../db/repositories/vacationRepo');
 const { buildLootDetailEmbed } = require('../embeds/lootDetailEmbed');
 
 const data = new SlashCommandBuilder()
@@ -21,10 +22,13 @@ async function execute(interaction) {
     return;
   }
 
+  const currentVacation = vacationRepo.getCurrentVacationForMember(targetUser.id, new Date().toISOString().slice(0, 10));
+
   const embed = buildLootDetailEmbed({
     displayName,
     avatarUrl: targetUser.displayAvatarURL(),
     ...result,
+    currentVacation,
   });
   await interaction.reply({ embeds: [embed] });
 }

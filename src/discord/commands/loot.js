@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const lootRepo = require('../../db/repositories/lootRepo');
 const settingsRepo = require('../../db/repositories/settingsRepo');
+const vacationRepo = require('../../db/repositories/vacationRepo');
 const { processLootEligibility } = require('../../stats/lootEligibility');
 const { buildLootIneligibleEmbed, buildLootOverviewEmbed } = require('../embeds/lootEmbed');
 
@@ -24,7 +25,9 @@ async function execute(interaction) {
   const thresholds = settingsRepo.getLootThresholds();
 
   const embed = view === 'all'
-    ? buildLootOverviewEmbed({ rows, thresholds })
+    ? buildLootOverviewEmbed({
+      rows, thresholds, onVacation: vacationRepo.getCurrentlyOnVacation(new Date().toISOString().slice(0, 10)),
+    })
     : buildLootIneligibleEmbed({ rows, thresholds });
 
   await interaction.reply({ embeds: [embed] });

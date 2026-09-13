@@ -11,9 +11,13 @@ function formatDay(entry) {
   return `\`${entry.day}\`  ${mark}${progress}`;
 }
 
+function formatCurrentVacation(currentVacation) {
+  return `🌴 **Currently unavailable** — back \`${currentVacation.end_date}\`${currentVacation.reason ? ` (${currentVacation.reason})` : ''}. Days in this range don't count toward loot eligibility either way.`;
+}
+
 function buildLootDetailEmbed({
   displayName, avatarUrl, joinedDay, trace, lastEligibleChangeDay, lastResetDay, finalState, thresholds,
-  amnestyApplied, amnestyDate,
+  amnestyApplied, amnestyDate, currentVacation,
 }) {
   const embed = new EmbedBuilder()
     .setAuthor({ name: displayName, iconURL: avatarUrl })
@@ -23,7 +27,9 @@ function buildLootDetailEmbed({
 
   if (trace.length === 0) {
     const since = amnestyApplied ? `the \`${amnestyDate}\` loot amnesty` : `${displayName} was tracked (\`${joinedDay}\`)`;
-    embed.setDescription(`No event days have occurred since ${since} yet — nothing to evaluate.`);
+    const sections = [`No event days have occurred since ${since} yet — nothing to evaluate.`];
+    if (currentVacation) sections.push(formatCurrentVacation(currentVacation));
+    embed.setDescription(buildDescription(sections));
     return embed;
   }
 
@@ -32,6 +38,7 @@ function buildLootDetailEmbed({
     : `**Status: 🔒 Ineligible** — ${finalState.accumulatedSignedDays}/${thresholds.recoveryDays} days signed toward recovery`;
 
   const sections = [statusLine];
+  if (currentVacation) sections.push(formatCurrentVacation(currentVacation));
   if (amnestyApplied) {
     sections.push(`*(History before the \`${amnestyDate}\` loot amnesty isn't shown — everyone tracked by then started eligible on that date.)*`);
   }

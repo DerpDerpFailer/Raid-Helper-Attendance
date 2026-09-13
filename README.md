@@ -39,8 +39,8 @@ guild.
 | `/flop axis:<global\|presence\|sign-up\|absence>` | commands-role | Bottom 10 on the chosen axis (`absence` = who marks themselves absent most) |
 | `/dropouts` | commands-role | Members whose Global Score dropped enough to flag Alert/Critical this period |
 | `/nosignup [days]` | commands-role | Tracked members with zero sign-up (any status) in a rolling N-day window (default 7) |
-| `/eligibility-loot view:<ineligible\|all>` | commands-role | Loot eligibility list, with recovery progress |
-| `/eligibility-loot-detail member:<user>` | commands-role | Day-by-day explanation of why one member is (or isn't) loot-eligible |
+| `/eligibility-loot view:<ineligible\|all>` | commands-role | Loot eligibility list, with recovery progress. `all` groups currently-vacationing members into their own section |
+| `/eligibility-loot-detail member:<user>` | commands-role | Day-by-day explanation of why one member is (or isn't) loot-eligible, and their current vacation status if any |
 | `/sync action:<status\|now>` | Manage Server | Inspect sync state, or force an immediate poll + recompute |
 | `/setup [...]` | Manage Server | Configure the bot — every option is optional, fill in only what you want to change (see below) |
 | `/vacation-post` | Manage Server | Post the self-service unavailability announcement + button in the current channel (see below) |
@@ -109,6 +109,11 @@ a form (start date, end date, optional reason). Once submitted:
   count normally again.
 - Applies immediately (like the other loot settings, it forces a full recalculation), not on the
   next `/sync now`.
+- Anyone currently on a declared vacation shows up in its own **🌴 On vacation** section in
+  `/eligibility-loot view:all` (with their return date, reason, and underlying eligible/ineligible
+  status), and as a note at the top of `/eligibility-loot-detail` for that member. This doesn't
+  change `/eligibility-loot view:ineligible`, which stays focused on "who currently can't loot"
+  regardless of vacation status.
 
 ## First-time setup
 
