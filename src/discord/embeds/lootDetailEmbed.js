@@ -13,6 +13,7 @@ function formatDay(entry) {
 
 function buildLootDetailEmbed({
   displayName, avatarUrl, joinedDay, trace, lastEligibleChangeDay, lastResetDay, finalState, thresholds,
+  amnestyApplied, amnestyDate,
 }) {
   const embed = new EmbedBuilder()
     .setAuthor({ name: displayName, iconURL: avatarUrl })
@@ -21,7 +22,8 @@ function buildLootDetailEmbed({
     .setFooter({ text: `Tracked since ${joinedDay} · drops after ${thresholds.ineligibleAfterDays} consecutive missed days, recovers after ${thresholds.recoveryDays} signed days` });
 
   if (trace.length === 0) {
-    embed.setDescription(`No event days have occurred since ${displayName} was tracked (${joinedDay}) yet — nothing to evaluate.`);
+    const since = amnestyApplied ? `the \`${amnestyDate}\` loot amnesty` : `${displayName} was tracked (\`${joinedDay}\`)`;
+    embed.setDescription(`No event days have occurred since ${since} yet — nothing to evaluate.`);
     return embed;
   }
 
@@ -30,14 +32,23 @@ function buildLootDetailEmbed({
     : `**Status: 🔒 Ineligible** — ${finalState.accumulatedSignedDays}/${thresholds.recoveryDays} days signed toward recovery`;
 
   const sections = [statusLine];
+  if (amnestyApplied) {
+    sections.push(`*(History before the \`${amnestyDate}\` loot amnesty isn't shown — everyone tracked by then started eligible on that date.)*`);
+  }
 
   // Anchor point for both the narrative and the displayed window: while ineligible, the most
   // recent progress-reset (lastResetDay) is more relevant than the original drop if there have
   // been several gaps since — that reset is what actually explains today's low progress.
   let anchorDay;
   if (finalState.eligible) {
-    anchorDay = lastEligibleChangeDay;
-    sections.push(`**Last change:** regained eligibility on \`${lastEligibleChangeDay}\` (reached ${thresholds.recoveryDays} signed days).`);
+    if (lastEligibleChangeDay === null) {
+      // Only reachable via the amnesty: initial state was already eligible and never flipped.
+      anchorDay = null;
+      sections.push(`Eligible since the \`${amnestyDate}\` amnesty — no drops since.`);
+    } else {
+      anchorDay = lastEligibleChangeDay;
+      sections.push(`**Last change:** regained eligibility on \`${lastEligibleChangeDay}\` (reached ${thresholds.recoveryDays} signed days).`);
+    }
   } else if (lastResetDay) {
     anchorDay = lastResetDay;
     // lastResetDay === lastEligibleChangeDay means this reset IS the day eligibility was first

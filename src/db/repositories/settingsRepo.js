@@ -22,6 +22,8 @@ const LOOT_RECOVERY_DAYS_KEY = 'loot_recovery_days';
 const LOOT_RECOVERY_GAP_DAYS_KEY = 'loot_recovery_gap_days';
 const DEFAULT_LOOT_THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7, recoveryGapDays: 2 };
 
+const LOOT_AMNESTY_DATE_KEY = 'loot_amnesty_date';
+
 const TOP_FLOP_SIZE_KEY = 'top_flop_size';
 const POLL_INTERVAL_MINUTES_KEY = 'poll_interval_minutes';
 const COMMANDS_ROLE_ID_KEY = 'commands_role_id';
@@ -151,6 +153,22 @@ function setLootThresholds({ ineligibleAfterDays, recoveryDays, recoveryGapDays 
   if (recoveryGapDays !== undefined) set(LOOT_RECOVERY_GAP_DAYS_KEY, String(recoveryGapDays));
 }
 
+/**
+ * Loot amnesty date (set via /setup loot-amnesty-date, 'YYYY-MM-DD' or null to disable). Any
+ * member already tracked on or before this date starts their loot-eligibility replay AT this
+ * date as already eligible, instead of at their real joined_at as ineligible — a one-time
+ * "everyone starts fresh" cutover. Members who join after this date are unaffected: they still
+ * earn eligibility normally from their own joined_at. See stats/lootEligibility.js.
+ */
+function getLootAmnestyDate() {
+  return get(LOOT_AMNESTY_DATE_KEY);
+}
+
+/** @param date 'YYYY-MM-DD', or null/undefined to disable the amnesty. */
+function setLootAmnestyDate(date) {
+  set(LOOT_AMNESTY_DATE_KEY, date ?? null);
+}
+
 /** Number of entries shown in /top and /flop (set via /setup). Falls back to TOP_FLOP_SIZE. */
 function getTopFlopSize() {
   return numberOr(get(TOP_FLOP_SIZE_KEY), config.stats.topFlopSize);
@@ -210,4 +228,6 @@ module.exports = {
   setPollIntervalMinutes,
   getCommandsRoleId,
   setCommandsRoleId,
+  getLootAmnestyDate,
+  setLootAmnestyDate,
 };

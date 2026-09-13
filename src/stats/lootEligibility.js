@@ -56,12 +56,36 @@ function step(state, signedToday, thresholds) {
 }
 
 /**
+ * A member's effective loot-eligibility replay starting point and initial state. Normally that's
+ * their real tracked join day, starting ineligible with zero progress (they earn eligibility the
+ * same way anyone recovering does). But if a /setup loot-amnesty-date is configured and this
+ * member was already tracked on or before it, the replay instead starts AT the amnesty date, as
+ * already eligible — a one-time "everyone already here starts fresh" cutover. Members who joined
+ * after the amnesty date are unaffected: they still earn it normally from their own join day.
+ */
+function getReplayStart(joinedDay) {
+  const amnestyDate = settingsRepo.getLootAmnestyDate();
+  if (amnestyDate && joinedDay <= amnestyDate) {
+    return {
+      startDay: amnestyDate,
+      initialState: { eligible: true, consecutiveMissedDays: 0, accumulatedSignedDays: 0 },
+      amnestyApplied: true,
+    };
+  }
+  return {
+    startDay: joinedDay,
+    initialState: { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 0 },
+    amnestyApplied: false,
+  };
+}
+
+/**
  * Advances every tracked member's loot eligibility state through every fully-completed day (up
  * to, not including, today) that has at least one event — days with zero events are skipped
  * entirely (neutral). Only processes days after each member's last_processed_day, so it's a cheap
  * no-op once caught up, but naturally does a full historical backfill the first time it ever runs
- * for a given member (starting from their tracked join day or the earliest event day, whichever
- * is later).
+ * for a given member (starting from their effective replay start day — see getReplayStart — or
+ * the earliest event day, whichever is later).
  */
 function processLootEligibility(now = new Date()) {
   const db = getDb();
@@ -82,11 +106,12 @@ function processLootEligibility(now = new Date()) {
 
   for (const member of members) {
     const joinedDay = member.joined_at.slice(0, 10);
+    const { startDay, initialState } = getReplayStart(joinedDay);
     const neverProcessed = member.last_processed_day === null || member.last_processed_day === undefined;
-    const floorDay = joinedDay > firstEventDay ? joinedDay : firstEventDay;
+    const floorDay = startDay > firstEventDay ? startDay : firstEventDay;
     const startAfter = neverProcessed ? dayBefore(floorDay) : member.last_processed_day;
 
-    const relevantDays = eventDays.filter((d) => d > startAfter && d >= joinedDay);
+    const relevantDays = eventDays.filter((d) => d > startAfter && d >= startDay);
     if (relevantDays.length === 0) continue;
 
     const signedDays = new Set(db.prepare(`
@@ -95,10 +120,10 @@ function processLootEligibility(now = new Date()) {
       WHERE s.member_id = ? AND e.start_time < ?
     `).all(member.member_id, todayStart.toISOString()).map((r) => r.day));
 
-    // Never processed before: start as ineligible with zero progress — a member earns initial
-    // eligibility the same way anyone recovering does, per the confirmed rule.
+    // Never processed before: start from this member's effective replay start (see
+    // getReplayStart — normally ineligible at their join day, or eligible at the amnesty date).
     let state = neverProcessed
-      ? { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 0 }
+      ? initialState
       : {
         eligible: member.eligible === 1,
         consecutiveMissedDays: member.consecutive_missed_days,
@@ -138,9 +163,11 @@ function traceMemberHistory(memberId, now = new Date()) {
   if (!member) return null;
 
   const joinedDay = member.joined_at.slice(0, 10);
+  const { startDay, initialState, amnestyApplied } = getReplayStart(joinedDay);
+
   const eventDays = db.prepare(
     'SELECT DISTINCT date(start_time) AS day FROM events WHERE start_time < ? AND date(start_time) >= ? ORDER BY day'
-  ).all(todayStart.toISOString(), joinedDay).map((r) => r.day);
+  ).all(todayStart.toISOString(), startDay).map((r) => r.day);
 
   const signedDays = new Set(db.prepare(`
     SELECT DISTINCT date(e.start_time) AS day
@@ -148,7 +175,7 @@ function traceMemberHistory(memberId, now = new Date()) {
     WHERE s.member_id = ? AND e.start_time < ?
   `).all(memberId, todayStart.toISOString()).map((r) => r.day));
 
-  let state = { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 0 };
+  let state = initialState;
   const trace = [];
   let lastEligibleChangeDay = null; // last day the eligible flag itself flipped, either direction
   let lastResetDay = null; // last day a fresh gap wiped recovery progress (accumulatedSignedDays)
@@ -176,7 +203,14 @@ function traceMemberHistory(memberId, now = new Date()) {
   }
 
   return {
-    joinedDay, thresholds, trace, lastEligibleChangeDay, lastResetDay, finalState: state,
+    joinedDay,
+    thresholds,
+    trace,
+    lastEligibleChangeDay,
+    lastResetDay,
+    finalState: state,
+    amnestyApplied,
+    amnestyDate: amnestyApplied ? startDay : null,
   };
 }
 

@@ -71,6 +71,7 @@ All optional — omit everything to just see the current values.
 | `loot-ineligible-after-days` | 3 | Consecutive missed days before loot eligibility drops |
 | `loot-recovery-days` | 7 | Signed days needed to (re)gain loot eligibility |
 | `loot-recovery-gap-days` | 2 | Consecutive missed days tolerated *while recovering* before progress resets to 0 — independent from `loot-ineligible-after-days`. `0` means recovery must be `loot-recovery-days` strictly consecutive signed days |
+| `loot-amnesty-date` | none | `YYYY-MM-DD` (today or earlier), or `none` to disable. See below |
 | `top-flop-size` | 10 | Number of entries shown in `/top` and `/flop` |
 | `poll-interval-minutes` | 20 | How often the bot polls the Raid-Helper API |
 
@@ -78,6 +79,14 @@ Changes to `role`/period/eligibility/loot settings apply on the next `/sync now`
 member roster first, then recomputes stats and loot) or the next daily recompute — not
 retroactively to already-frozen past periods. `poll-interval-minutes` is the one exception — it
 reschedules the polling job immediately, no `/sync now` or restart needed.
+
+**`loot-amnesty-date`** is a one-time cutover for the loot-eligibility state machine: any member
+already tracked on or before that date starts *eligible* right at that date, instead of replaying
+their real history from their join day as ineligible. Useful for "everyone starts fresh" after
+deploying this bot for the first time, or after a rules change you don't want retroactively applied
+to old history. Members who join after that date are unaffected — they still earn eligibility
+normally from their own join day. Changing this (like the other loot settings) forces a full
+history recalculation on the next `/sync now`.
 
 ## First-time setup
 

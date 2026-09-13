@@ -324,3 +324,74 @@ describe('stats/lootEligibility processLootEligibility — reprocessing after a 
     expect(trace.finalState.accumulatedSignedDays).toBe(reprocessed.accumulated_signed_days);
   });
 });
+
+describe('stats/lootEligibility loot-amnesty-date cutover', () => {
+  beforeAll(() => {
+    // Earlier tests in this file mutate the global loot thresholds — pin known values here.
+    settingsRepo.setLootThresholds({ ineligibleAfterDays: 3, recoveryDays: 7, recoveryGapDays: 2 });
+  });
+
+  it('a member tracked before the amnesty date starts eligible AT that date, ignoring earlier history', () => {
+    seedMember('amnesty-old', 'AmnestyOld', '2026-01-01T00:00:00.000Z');
+    // Messy pre-amnesty history that would normally still leave them ineligible — must be ignored.
+    seedDaySequence('amnesty-old', 'amnestyold-pre', ['2026-05-01', '2026-05-02', '2026-05-03'], new Set());
+
+    settingsRepo.setLootAmnestyDate('2026-06-01');
+
+    // After the amnesty: one missed day (not enough to drop, needs 3), then two signed days.
+    seedDaySequence('amnesty-old', 'amnestyold-post', ['2026-06-02', '2026-06-03', '2026-06-04'], new Set(['2026-06-03', '2026-06-04']));
+
+    const now = new Date('2026-06-05T00:00:00.000Z');
+    const result = traceMemberHistory('amnesty-old', now);
+
+    expect(result.amnestyApplied).toBe(true);
+    expect(result.amnestyDate).toBe('2026-06-01');
+    expect(result.trace.map((e) => e.day)).toEqual(['2026-06-02', '2026-06-03', '2026-06-04']);
+    // Started eligible via the amnesty — the single missed day isn't enough to drop (needs 3).
+    expect(result.finalState).toMatchObject({ eligible: true });
+    expect(result.lastEligibleChangeDay).toBeNull(); // never flipped: eligible since the amnesty itself
+  });
+
+  it('a member who joined AFTER the amnesty date is unaffected — earns eligibility normally from their own join day', () => {
+    seedMember('amnesty-new', 'AmnestyNew', '2026-06-15T00:00:00.000Z'); // joined after the 2026-06-01 amnesty
+    seedDaySequence('amnesty-new', 'amnestynew', ['2026-06-16', '2026-06-17'], new Set(['2026-06-16', '2026-06-17']));
+
+    const result = traceMemberHistory('amnesty-new', new Date('2026-06-18T00:00:00.000Z'));
+
+    expect(result.amnestyApplied).toBe(false);
+    expect(result.finalState).toMatchObject({ eligible: false, accumulatedSignedDays: 2 }); // earning normally, not yet at 7
+  });
+
+  it('disabling the amnesty (loot-amnesty-date:none) reverts to the normal join-day replay', () => {
+    settingsRepo.setLootAmnestyDate(null);
+
+    const result = traceMemberHistory('amnesty-old', new Date('2026-06-05T00:00:00.000Z'));
+    expect(result.amnestyApplied).toBe(false);
+    // Now replays from the real join day (2026-01-01), including the previously-ignored days.
+    expect(result.trace.some((e) => e.day === '2026-05-01')).toBe(true);
+  });
+
+  it('processLootEligibility + resetProcessingState() applies a newly-configured amnesty to already-processed members', () => {
+    seedMember('amnesty-proc', 'AmnestyProc', '2026-01-01T00:00:00.000Z');
+    seedDaySequence('amnesty-proc', 'amnestyproc-pre', ['2026-05-01', '2026-05-02', '2026-05-03'], new Set());
+    seedDaySequence('amnesty-proc', 'amnestyproc-post', ['2026-06-02', '2026-06-03'], new Set(['2026-06-03']));
+
+    const now = new Date('2026-06-04T00:00:00.000Z');
+
+    // Process once with no amnesty configured — normal earn-it path, still ineligible.
+    settingsRepo.setLootAmnestyDate(null);
+    processLootEligibility(now);
+    expect(lootRepo.getRow('amnesty-proc').eligible).toBe(0);
+
+    // Configure the amnesty and force a full reprocess (mirrors what /setup now does).
+    settingsRepo.setLootAmnestyDate('2026-06-01');
+    lootRepo.resetProcessingState();
+    processLootEligibility(now);
+
+    const row = lootRepo.getRow('amnesty-proc');
+    expect(row.eligible).toBe(1); // eligible per the amnesty; the lone 06-02 miss never reached ineligibleAfterDays(3)
+
+    const trace = traceMemberHistory('amnesty-proc', now);
+    expect(trace.finalState.eligible).toBe(true);
+  });
+});

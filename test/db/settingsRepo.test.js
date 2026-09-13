@@ -59,6 +59,16 @@ describe('db/repositories/settingsRepo', () => {
     });
   });
 
+  it('loot amnesty date defaults to unset, and can be set then cleared back to null', () => {
+    expect(settingsRepo.getLootAmnestyDate()).toBeNull();
+
+    settingsRepo.setLootAmnestyDate('2026-09-01');
+    expect(settingsRepo.getLootAmnestyDate()).toBe('2026-09-01');
+
+    settingsRepo.setLootAmnestyDate(null);
+    expect(settingsRepo.getLootAmnestyDate()).toBeNull();
+  });
+
   it('commands role defaults to unset (admins-only) until /setup commands-role overrides it', () => {
     expect(settingsRepo.getCommandsRoleId()).toBeNull();
 

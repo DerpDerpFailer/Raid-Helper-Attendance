@@ -12,6 +12,8 @@ function build(overrides) {
     lastResetDay: null,
     finalState: { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 0 },
     thresholds: { ineligibleAfterDays: 3, recoveryDays: 7, recoveryGapDays: 2 },
+    amnestyApplied: false,
+    amnestyDate: null,
     ...overrides,
   });
 }
@@ -62,5 +64,51 @@ describe('discord/embeds/lootDetailEmbed narrative thresholds', () => {
     });
 
     expect(embed.data.description).toContain('most recent reset on `2026-08-30` (1 consecutive missed day(s))');
+  });
+});
+
+describe('discord/embeds/lootDetailEmbed loot-amnesty-date narrative', () => {
+  it('shows a dedicated message when still eligible since the amnesty, with no drop since (lastEligibleChangeDay null)', () => {
+    const embed = build({
+      trace: [{
+        day: '2026-06-02', signed: true, eligible: true, consecutiveMissedDays: 0, accumulatedSignedDays: 0,
+      }],
+      lastEligibleChangeDay: null,
+      lastResetDay: null,
+      finalState: { eligible: true, consecutiveMissedDays: 0, accumulatedSignedDays: 0 },
+      amnestyApplied: true,
+      amnestyDate: '2026-06-01',
+    });
+
+    const { description } = embed.data;
+    expect(description).toContain('Eligible since the `2026-06-01` amnesty — no drops since.');
+    expect(description).toContain('History before the `2026-06-01` loot amnesty');
+  });
+
+  it('still shows the normal drop narrative when amnesty-granted eligibility was later lost', () => {
+    const embed = build({
+      trace: [{
+        day: '2026-06-05', signed: false, eligible: false, consecutiveMissedDays: 3, accumulatedSignedDays: 0,
+      }],
+      lastEligibleChangeDay: '2026-06-05',
+      lastResetDay: '2026-06-05',
+      finalState: { eligible: false, consecutiveMissedDays: 0, accumulatedSignedDays: 0 },
+      amnestyApplied: true,
+      amnestyDate: '2026-06-01',
+    });
+
+    const { description } = embed.data;
+    expect(description).toContain('History before the `2026-06-01` loot amnesty');
+    expect(description).toContain('dropped to ineligible on `2026-06-05` (3 consecutive missed days)');
+  });
+
+  it('references the amnesty date instead of the join day when there is no history to evaluate yet', () => {
+    const embed = build({
+      trace: [],
+      amnestyApplied: true,
+      amnestyDate: '2026-06-01',
+    });
+
+    expect(embed.data.description).toContain('No event days have occurred since the `2026-06-01` loot amnesty yet');
   });
 });

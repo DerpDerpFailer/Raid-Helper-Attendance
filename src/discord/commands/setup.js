@@ -71,6 +71,9 @@ const data = new SlashCommandBuilder()
     .setDescription('Consecutive missed days tolerated during recovery before progress resets (default 2, 0=strict)')
     .setMinValue(0)
     .setMaxValue(60))
+  .addStringOption((opt) => opt
+    .setName('loot-amnesty-date')
+    .setDescription('YYYY-MM-DD: members tracked by then start loot-eligible from that date. "none" disables it'))
   .addIntegerOption((opt) => opt
     .setName('top-flop-size')
     .setDescription('Number of entries shown in /top and /flop (default 10)')
@@ -138,15 +141,52 @@ async function execute(interaction) {
     recoveryDays: interaction.options.getInteger('loot-recovery-days') ?? undefined,
     recoveryGapDays: interaction.options.getInteger('loot-recovery-gap-days') ?? undefined,
   };
-  const lootChanged = Object.values(lootOverrides).some((v) => v !== undefined);
-  if (lootChanged) {
+  const lootThresholdsChanged = Object.values(lootOverrides).some((v) => v !== undefined);
+  if (lootThresholdsChanged) {
     settingsRepo.setLootThresholds(lootOverrides);
-    // Already-stored per-member progress was computed under the old thresholds — force a full
-    // history replay under the new ones on the next processing run, instead of only applying the
-    // change to days going forward (which would leave existing progress inconsistent with what
+    changes.push('Loot eligibility thresholds updated');
+  }
+
+  const lootAmnestyDateRaw = interaction.options.getString('loot-amnesty-date');
+  let lootAmnestyDateProvided = false;
+  let lootAmnestyDateValue = null;
+  if (lootAmnestyDateRaw !== null) {
+    lootAmnestyDateProvided = true;
+    const trimmed = lootAmnestyDateRaw.trim();
+    if (trimmed.toLowerCase() === 'none') {
+      lootAmnestyDateValue = null;
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      await interaction.reply({
+        ephemeral: true,
+        content: 'Invalid `loot-amnesty-date` — use `YYYY-MM-DD` (e.g. `2026-09-01`), or `none` to disable it. No changes were applied.',
+      });
+      return;
+    } else {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (trimmed > todayStr) {
+        await interaction.reply({
+          ephemeral: true,
+          content: `Invalid \`loot-amnesty-date\` — must be today (${todayStr}) or earlier, not in the future. No changes were applied.`,
+        });
+        return;
+      }
+      lootAmnestyDateValue = trimmed;
+    }
+  }
+  if (lootAmnestyDateProvided) {
+    settingsRepo.setLootAmnestyDate(lootAmnestyDateValue);
+    changes.push(lootAmnestyDateValue
+      ? `Loot amnesty date → **${lootAmnestyDateValue}** (everyone tracked by then starts eligible from that date)`
+      : 'Loot amnesty date → **disabled**');
+  }
+
+  if (lootThresholdsChanged || lootAmnestyDateProvided) {
+    // Already-stored per-member progress was computed under the old rules — force a full history
+    // replay under the new ones on the next processing run, instead of only applying the change
+    // to days going forward (which would leave existing progress inconsistent with what
     // /eligibility-loot-detail's always-fresh replay shows).
     lootRepo.resetProcessingState();
-    changes.push('Loot eligibility thresholds updated — recovery history will be fully recalculated under the new rules on the next `/sync now` (or the daily recompute)');
+    changes.push('Loot eligibility history will be fully recalculated under the new rules on the next `/sync now` (or the daily recompute)');
   }
 
   const topFlopSize = interaction.options.getInteger('top-flop-size');
@@ -166,6 +206,7 @@ async function execute(interaction) {
   const lt = settingsRepo.getLootThresholds();
   const commandsRoleId = settingsRepo.getCommandsRoleId();
   const monitoredRoleId = settingsRepo.getMonitoredRoleId();
+  const lootAmnestyDate = settingsRepo.getLootAmnestyDate();
   const { presenceWeight, responseWeight } = settingsRepo.getScoreWeights();
   const currentSummary = [
     `Tracked-member role: ${monitoredRoleId ? `<@&${monitoredRoleId}>` : '**not set** — falls back to every non-bot member'}`,
@@ -175,6 +216,7 @@ async function execute(interaction) {
     `Ranking eligibility: **${settingsRepo.getEligibilityMinDays()}+ days**`,
     `Dropout thresholds — Alert: rank ≥${t.alertRank} or score ≥${t.alertScore}, Critical: rank ≥${t.criticalRank} or score ≥${t.criticalScore}`,
     `Loot eligibility — drops after ${lt.ineligibleAfterDays} consecutive missed days, recovers after ${lt.recoveryDays} signed days (tolerates ${lt.recoveryGapDays} missed day(s) in a row during recovery before progress resets)`,
+    `Loot amnesty date: ${lootAmnestyDate ? `**${lootAmnestyDate}** (members tracked by then start eligible from that date)` : 'not set'}`,
     `/top and /flop size: **${settingsRepo.getTopFlopSize()}**`,
     `Poll interval: **every ${settingsRepo.getPollIntervalMinutes()} minutes**`,
   ];
