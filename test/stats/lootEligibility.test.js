@@ -12,6 +12,7 @@ const { getDb } = require('../../src/db/connection');
 const { processLootEligibility, step, traceMemberHistory } = require('../../src/stats/lootEligibility');
 const lootRepo = require('../../src/db/repositories/lootRepo');
 const settingsRepo = require('../../src/db/repositories/settingsRepo');
+const vacationRepo = require('../../src/db/repositories/vacationRepo');
 
 const THRESHOLDS = { ineligibleAfterDays: 3, recoveryDays: 7, recoveryGapDays: 2 };
 
@@ -393,5 +394,51 @@ describe('stats/lootEligibility loot-amnesty-date cutover', () => {
 
     const trace = traceMemberHistory('amnesty-proc', now);
     expect(trace.finalState.eligible).toBe(true);
+  });
+});
+
+describe('stats/lootEligibility loot_vacations pause the eligibility calculation', () => {
+  beforeAll(() => {
+    // Earlier describes in this file mutate global settings — pin known values here.
+    settingsRepo.setLootThresholds({ ineligibleAfterDays: 3, recoveryDays: 7, recoveryGapDays: 2 });
+    settingsRepo.setLootAmnestyDate(null);
+  });
+
+  it('days covered by an active vacation are invisible to the state machine, and counting resumes once it is cancelled', () => {
+    // Joined after every other fixture's seeded event days in this file, so this replay doesn't
+    // pick up unrelated events from earlier describe blocks (events are a shared, global table).
+    seedMember('vacationer', 'Vacationer', '2026-06-25T00:00:00.000Z');
+    const days = ['2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-05', '2026-07-06'];
+    seedDaySequence('vacationer', 'vacationer', days, new Set(['2026-07-01', '2026-07-02', '2026-07-06']));
+
+    // Without the vacation, 07-03/04/05 would be 3 consecutive missed days -> resets progress
+    // (recoveryGapDays: 2, threshold 3). Declare them covered.
+    const vacation = vacationRepo.create({
+      memberId: 'vacationer', startDate: '2026-07-03', endDate: '2026-07-05', reason: 'Vacation',
+    });
+
+    const now = new Date('2026-07-07T00:00:00.000Z');
+
+    // The always-fresh replay never even sees the 3 vacation days — same as a day with no events.
+    const trace = traceMemberHistory('vacationer', now);
+    expect(trace.trace.map((e) => e.day)).toEqual(['2026-07-01', '2026-07-02', '2026-07-06']);
+    expect(trace.finalState).toMatchObject({ eligible: false, accumulatedSignedDays: 3 });
+
+    processLootEligibility(now);
+    expect(lootRepo.getRow('vacationer')).toMatchObject({
+      eligible: 0, consecutive_missed_days: 0, accumulated_signed_days: 3,
+    });
+
+    // Cancel it and force a full reprocess — the 3 days now count again, resetting progress.
+    vacationRepo.cancel(vacation.id, 'test-admin');
+    lootRepo.resetProcessingState();
+    processLootEligibility(now);
+
+    const reprocessed = lootRepo.getRow('vacationer');
+    expect(reprocessed).toMatchObject({ eligible: 0, accumulated_signed_days: 1 });
+
+    const retrace = traceMemberHistory('vacationer', now);
+    expect(retrace.trace.map((e) => e.day)).toEqual(days);
+    expect(retrace.finalState.accumulatedSignedDays).toBe(reprocessed.accumulated_signed_days);
   });
 });

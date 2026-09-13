@@ -1,6 +1,7 @@
 const { getDb } = require('../db/connection');
 const lootRepo = require('../db/repositories/lootRepo');
 const settingsRepo = require('../db/repositories/settingsRepo');
+const vacationRepo = require('../db/repositories/vacationRepo');
 const { startOfUTCDate, addDays } = require('../utils/dates');
 const logger = require('../utils/logger');
 
@@ -82,10 +83,12 @@ function getReplayStart(joinedDay) {
 /**
  * Advances every tracked member's loot eligibility state through every fully-completed day (up
  * to, not including, today) that has at least one event — days with zero events are skipped
- * entirely (neutral). Only processes days after each member's last_processed_day, so it's a cheap
- * no-op once caught up, but naturally does a full historical backfill the first time it ever runs
- * for a given member (starting from their effective replay start day — see getReplayStart — or
- * the earliest event day, whichever is later).
+ * entirely (neutral), and so is any day covered by one of that member's ACTIVE declared
+ * unavailability periods (see db/repositories/vacationRepo.js) — same neutral treatment, just
+ * scoped to that one member instead of the whole guild. Only processes days after each member's
+ * last_processed_day, so it's a cheap no-op once caught up, but naturally does a full historical
+ * backfill the first time it ever runs for a given member (starting from their effective replay
+ * start day — see getReplayStart — or the earliest event day, whichever is later).
  */
 function processLootEligibility(now = new Date()) {
   const db = getDb();
@@ -110,8 +113,9 @@ function processLootEligibility(now = new Date()) {
     const neverProcessed = member.last_processed_day === null || member.last_processed_day === undefined;
     const floorDay = startDay > firstEventDay ? startDay : firstEventDay;
     const startAfter = neverProcessed ? dayBefore(floorDay) : member.last_processed_day;
+    const excludedDays = vacationRepo.getExcludedDaysForMember(member.member_id);
 
-    const relevantDays = eventDays.filter((d) => d > startAfter && d >= startDay);
+    const relevantDays = eventDays.filter((d) => d > startAfter && d >= startDay && !excludedDays.has(d));
     if (relevantDays.length === 0) continue;
 
     const signedDays = new Set(db.prepare(`
@@ -165,9 +169,10 @@ function traceMemberHistory(memberId, now = new Date()) {
   const joinedDay = member.joined_at.slice(0, 10);
   const { startDay, initialState, amnestyApplied } = getReplayStart(joinedDay);
 
+  const excludedDays = vacationRepo.getExcludedDaysForMember(memberId);
   const eventDays = db.prepare(
     'SELECT DISTINCT date(start_time) AS day FROM events WHERE start_time < ? AND date(start_time) >= ? ORDER BY day'
-  ).all(todayStart.toISOString(), startDay).map((r) => r.day);
+  ).all(todayStart.toISOString(), startDay).map((r) => r.day).filter((d) => !excludedDays.has(d));
 
   const signedDays = new Set(db.prepare(`
     SELECT DISTINCT date(e.start_time) AS day

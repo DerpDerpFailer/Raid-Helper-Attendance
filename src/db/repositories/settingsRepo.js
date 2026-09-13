@@ -27,6 +27,7 @@ const LOOT_AMNESTY_DATE_KEY = 'loot_amnesty_date';
 const TOP_FLOP_SIZE_KEY = 'top_flop_size';
 const POLL_INTERVAL_MINUTES_KEY = 'poll_interval_minutes';
 const COMMANDS_ROLE_ID_KEY = 'commands_role_id';
+const VACATION_LOG_CHANNEL_ID_KEY = 'vacation_log_channel_id';
 
 function get(key) {
   const db = getDb();
@@ -169,6 +170,20 @@ function setLootAmnestyDate(date) {
   set(LOOT_AMNESTY_DATE_KEY, date ?? null);
 }
 
+/**
+ * Channel that receives vacation-declaration/cancellation recap embeds (set via /setup
+ * vacation-log-channel), separate from whichever channel hosts the /vacation-post
+ * announcement + button. Null until an admin sets one — declarations still work and pause loot
+ * eligibility, they just aren't logged anywhere until this is configured.
+ */
+function getVacationLogChannelId() {
+  return get(VACATION_LOG_CHANNEL_ID_KEY);
+}
+
+function setVacationLogChannelId(channelId) {
+  set(VACATION_LOG_CHANNEL_ID_KEY, channelId);
+}
+
 /** Number of entries shown in /top and /flop (set via /setup). Falls back to TOP_FLOP_SIZE. */
 function getTopFlopSize() {
   return numberOr(get(TOP_FLOP_SIZE_KEY), config.stats.topFlopSize);
@@ -230,4 +245,6 @@ module.exports = {
   setCommandsRoleId,
   getLootAmnestyDate,
   setLootAmnestyDate,
+  getVacationLogChannelId,
+  setVacationLogChannelId,
 };

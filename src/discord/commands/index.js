@@ -7,7 +7,8 @@ const loot = require('./loot');
 const lootDetail = require('./lootDetail');
 const sync = require('./sync');
 const setup = require('./setup');
+const vacationPost = require('./vacationPost');
 
-const commands = [top, flop, stats, dropouts, nosignup, loot, lootDetail, sync, setup];
+const commands = [top, flop, stats, dropouts, nosignup, loot, lootDetail, sync, setup, vacationPost];
 
 module.exports = { commands };

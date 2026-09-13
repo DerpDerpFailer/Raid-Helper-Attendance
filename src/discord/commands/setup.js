@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
 const settingsRepo = require('../../db/repositories/settingsRepo');
 const lootRepo = require('../../db/repositories/lootRepo');
 const scheduler = require('../../scheduler');
@@ -74,6 +74,10 @@ const data = new SlashCommandBuilder()
   .addStringOption((opt) => opt
     .setName('loot-amnesty-date')
     .setDescription('YYYY-MM-DD: members tracked by then start loot-eligible from that date. "none" disables it'))
+  .addChannelOption((opt) => opt
+    .setName('vacation-log-channel')
+    .setDescription('Channel for /vacation-post declaration & cancellation recap embeds')
+    .addChannelTypes(ChannelType.GuildText))
   .addIntegerOption((opt) => opt
     .setName('top-flop-size')
     .setDescription('Number of entries shown in /top and /flop (default 10)')
@@ -189,6 +193,12 @@ async function execute(interaction) {
     changes.push('Loot eligibility history will be fully recalculated under the new rules on the next `/sync now` (or the daily recompute)');
   }
 
+  const vacationLogChannel = interaction.options.getChannel('vacation-log-channel');
+  if (vacationLogChannel !== null) {
+    settingsRepo.setVacationLogChannelId(vacationLogChannel.id);
+    changes.push(`Vacation log channel → **#${vacationLogChannel.name}**`);
+  }
+
   const topFlopSize = interaction.options.getInteger('top-flop-size');
   if (topFlopSize !== null) {
     settingsRepo.setTopFlopSize(topFlopSize);
@@ -207,6 +217,7 @@ async function execute(interaction) {
   const commandsRoleId = settingsRepo.getCommandsRoleId();
   const monitoredRoleId = settingsRepo.getMonitoredRoleId();
   const lootAmnestyDate = settingsRepo.getLootAmnestyDate();
+  const vacationLogChannelId = settingsRepo.getVacationLogChannelId();
   const { presenceWeight, responseWeight } = settingsRepo.getScoreWeights();
   const currentSummary = [
     `Tracked-member role: ${monitoredRoleId ? `<@&${monitoredRoleId}>` : '**not set** — falls back to every non-bot member'}`,
@@ -217,6 +228,7 @@ async function execute(interaction) {
     `Dropout thresholds — Alert: rank ≥${t.alertRank} or score ≥${t.alertScore}, Critical: rank ≥${t.criticalRank} or score ≥${t.criticalScore}`,
     `Loot eligibility — drops after ${lt.ineligibleAfterDays} consecutive missed days, recovers after ${lt.recoveryDays} signed days (tolerates ${lt.recoveryGapDays} missed day(s) in a row during recovery before progress resets)`,
     `Loot amnesty date: ${lootAmnestyDate ? `**${lootAmnestyDate}** (members tracked by then start eligible from that date)` : 'not set'}`,
+    `Vacation log channel: ${vacationLogChannelId ? `<#${vacationLogChannelId}>` : 'not set'}`,
     `/top and /flop size: **${settingsRepo.getTopFlopSize()}**`,
     `Poll interval: **every ${settingsRepo.getPollIntervalMinutes()} minutes**`,
   ];

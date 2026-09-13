@@ -24,6 +24,9 @@ guild.
 - Runs a separate day-by-day state machine per member for loot eligibility: a consecutive-day
   sign-up gap drops it, a run of signed days restores it. See `/eligibility-loot-detail` to see
   the reasoning for one member.
+- Members can self-declare planned unavailability (vacation, work, etc.) via a button + form —
+  see "Vacations" below — which pauses the loot-eligibility clock for those days specifically,
+  without touching rankings or presence stats.
 - Every setting has a sensible env-var default (see [`.env.example`](./.env.example)) and can be
   overridden at runtime via `/setup` without a redeploy.
 
@@ -40,6 +43,7 @@ guild.
 | `/eligibility-loot-detail member:<user>` | commands-role | Day-by-day explanation of why one member is (or isn't) loot-eligible |
 | `/sync action:<status\|now>` | Manage Server | Inspect sync state, or force an immediate poll + recompute |
 | `/setup [...]` | Manage Server | Configure the bot — every option is optional, fill in only what you want to change (see below) |
+| `/vacation-post` | Manage Server | Post the self-service unavailability announcement + button in the current channel (see below) |
 
 ### Who can run what
 
@@ -72,6 +76,7 @@ All optional — omit everything to just see the current values.
 | `loot-recovery-days` | 7 | Signed days needed to (re)gain loot eligibility |
 | `loot-recovery-gap-days` | 2 | Consecutive missed days tolerated *while recovering* before progress resets to 0 — independent from `loot-ineligible-after-days`. `0` means recovery must be `loot-recovery-days` strictly consecutive signed days |
 | `loot-amnesty-date` | none | `YYYY-MM-DD` (today or earlier), or `none` to disable. See below |
+| `vacation-log-channel` | none | Channel that receives vacation declaration/cancellation recap embeds. See below |
 | `top-flop-size` | 10 | Number of entries shown in `/top` and `/flop` |
 | `poll-interval-minutes` | 20 | How often the bot polls the Raid-Helper API |
 
@@ -87,6 +92,23 @@ deploying this bot for the first time, or after a rules change you don't want re
 to old history. Members who join after that date are unaffected — they still earn eligibility
 normally from their own join day. Changing this (like the other loot settings) forces a full
 history recalculation on the next `/sync now`.
+
+## Vacations
+
+Run `/vacation-post` in whichever channel members should use to self-declare planned
+unavailability — it posts a standing embed with a **Mark unavailable** button. Clicking it opens
+a form (start date, end date, optional reason). Once submitted:
+
+- Every day in that range is treated as if it had no events at all, for that member only — it
+  can't drop their loot eligibility or reset their recovery progress. Rankings, presence stats,
+  and `/dropouts` are unaffected; this only pauses the loot-eligibility clock.
+- Declarations are capped at 14 days each (submit a new one if you need longer).
+- A recap embed is posted to the channel set via `/setup vacation-log-channel` (a separate channel
+  from wherever `/vacation-post` was run, to keep that one uncluttered), with a **Cancel** button —
+  clickable only by the member themselves or an admin. Cancelling immediately makes those days
+  count normally again.
+- Applies immediately (like the other loot settings, it forces a full recalculation), not on the
+  next `/sync now`.
 
 ## First-time setup
 
@@ -176,7 +198,8 @@ step needed.
 SQLite, migrated automatically at boot (`migrations/*.sql`, tracked in `schema_migrations`). Core
 tables: `members` (roster + tenure + tracked flag), `events` / `signups` (synced from Raid-Helper),
 `stats_periods` / `stats_snapshots` (one row per member per computed period), `loot_eligibility`
-(one row per member, current state machine values), `settings` (runtime `/setup` overrides).
+(one row per member, current state machine values), `loot_vacations` (declared unavailability
+periods, active or cancelled), `settings` (runtime `/setup` overrides).
 
 ## Known limitations / things to revisit
 

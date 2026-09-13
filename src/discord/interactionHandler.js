@@ -1,11 +1,27 @@
 const logger = require('../utils/logger');
 const { commands } = require('./commands');
 const { hasCommandsAccess } = require('./permissions');
+const vacationInteractions = require('./vacationInteractions');
 
 function registerInteractionHandler(client) {
   const byName = new Map(commands.map((c) => [c.data.name, c]));
 
   client.on('interactionCreate', async (interaction) => {
+    if (interaction.isButton() || interaction.isModalSubmit()) {
+      try {
+        await vacationInteractions.handleInteraction(interaction);
+      } catch (err) {
+        logger.error({ err: err.message, customId: interaction.customId }, 'Interaction handling failed');
+        const payload = { content: 'Something went wrong.', ephemeral: true };
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply(payload).catch(() => {});
+        } else {
+          await interaction.reply(payload).catch(() => {});
+        }
+      }
+      return;
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     const command = byName.get(interaction.commandName);
