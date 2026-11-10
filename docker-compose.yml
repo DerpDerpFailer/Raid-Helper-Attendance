@@ -18,6 +18,15 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - raid-helper-data:/app/data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   raid-helper-data:
