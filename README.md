@@ -183,6 +183,24 @@ The bot is not built locally — Portainer builds and runs it directly from this
    applies to the loot eligibility state machine and stats snapshots: they replay the full
    available history the first time they process a given member.
 
+### Unraid
+
+Deployed as a Portainer "Repository" stack named `raid-helper-attendance-bot` (GitOps off), with
+the variables from [`.env.example`](./.env.example) plus:
+
+| Variable | Value |
+|---|---|
+| `RAID_HELPER_ATTENDANCE_DATA_PATH` | `/mnt/user/appdata/raid-helper-attendance-bot/data` (create it and `chown -R 1000:1000` it first) |
+| `BOT_REPLICAS` | `1` (`0` keeps the stack deployed but offline, so two instances never share the token) |
+
+The container runs as `node` (1000:1000) with every capability dropped and `no-new-privileges`.
+The Docker tab icon comes from `icon/raid-helper-attendance-bot-256.png` via jsDelivr. To change
+it, add a file with a new name (jsDelivr caches `@main` for up to 7 days).
+
+**Upgrading an existing install to the non-root image:** data written by older versions is owned
+by root. `chown -R 1000:1000` the data folder (or the named volume's `_data`) before redeploying,
+otherwise the bot can't open the database.
+
 ### Redeploying after a `git push`
 
 Pick one, depending on how hands-off you want this:
@@ -205,6 +223,27 @@ tables: `members` (roster + tenure + tracked flag), `events` / `signups` (synced
 `stats_periods` / `stats_snapshots` (one row per member per computed period), `loot_eligibility`
 (one row per member, current state machine values), `loot_vacations` (declared unavailability
 periods, active or cancelled), `settings` (runtime `/setup` overrides).
+
+## Data, backup & restore
+
+Everything lives in one SQLite database, `/app/data/bot.sqlite`, in WAL mode: `bot.sqlite-wal`
+and `bot.sqlite-shm` sit next to it and hold recent writes. **Always copy the three files
+together**, with the bot stopped. Opening a copy with `sqlite3` is not read-only either: closing
+the last connection checkpoints the WAL into the main file and deletes it, so inspect a scratch
+copy, never the only copy you have.
+
+**Unraid** — Appdata Backup archives the data folder every Sunday at 04:00 (the container is
+stopped meanwhile, so the archive is consistent). `scripts/restore-raid-helper-attendance-data-unraid.sh`
+restores from the latest archive (or `--backup ab_…`, or `--from-dir <folder>`): it checks the
+source with `integrity_check` and folds its WAL in a scratch copy, then stops the bot, snapshots
+the current data, removes any stale WAL, copies, fixes ownership, verifies and restarts the bot.
+Dry-run unless `--apply`; run it from a machine with SSH access, nothing is installed on the host:
+
+```bash
+ssh root@192.168.1.240 'bash -s -- --help' < scripts/restore-raid-helper-attendance-data-unraid.sh
+ssh root@192.168.1.240 'bash -s --' < scripts/restore-raid-helper-attendance-data-unraid.sh            # dry-run, latest backup
+ssh root@192.168.1.240 'bash -s -- --apply' < scripts/restore-raid-helper-attendance-data-unraid.sh    # restore
+```
 
 ## Known limitations / things to revisit
 
